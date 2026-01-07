@@ -82,7 +82,7 @@ def build_index(records):
 # -------------------------------------------------
 def download_file(rel_path: str):
     rel_path = normalize_path(rel_path)
-    url = f"{BASE_URL}/{quote(rel_path, safe='()/')}"
+    url = f"{BASE_URL}/{quote(rel_path, safe='()/%')}"
 
     dst = Path(OUT_DIR) / rel_path
     dst.parent.mkdir(parents=True, exist_ok=True)
