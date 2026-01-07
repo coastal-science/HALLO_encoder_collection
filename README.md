@@ -15,6 +15,30 @@ gsutil -m rsync -r gs://noaa-passive-bioacoustic/dclde/2026/dclde_2026_killer_wh
 
 ## Test
 
+**Hear My Ship**
+
+This dataset contain audio clips, pictures and video of small vessels that typically do not have AIS information. I believe there is no background baseline.
+
+The dataset has the followiing classes:
+
+- Aux Vessels
+- Ferry
+- Sail Boat
+- Yatch
+- Fishing Boat
+- Tour Boat
+- Motor Boat
+
+Dataset website wiith examples: https://hearmyship.fer.hr/
+
+To download the data, run: 
+
+```bash
+python dataset_download_scripts/hear_my_ship_donwload.py --json-file dataset_download_scripts/vessels_hear_my_ship.json --assets sound --out-dir /Your/Output/Directory/
+```
+
+This command will download only the audio files. To download the otehr data type, do not set the `--assets` flag.
+
 **QiandaoEar22**
 
 This dataset contains clips of vessel noise for multiple vessel types, as well as background noise

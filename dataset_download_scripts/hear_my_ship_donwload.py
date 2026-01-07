@@ -82,7 +82,7 @@ def build_index(records):
 # -------------------------------------------------
 def download_file(rel_path: str):
     rel_path = normalize_path(rel_path)
-    url = f"{BASE_URL}/{quote(rel_path)}"
+    url = f"{BASE_URL}/{quote(rel_path, safe='()/')}"
 
     dst = Path(OUT_DIR) / rel_path
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -196,10 +196,8 @@ def main():
     with open(JSON_FILE, "r") as f:
         records = json.load(f)
 
-    # 1) Always build index (cheap, deterministic)
     build_index(records)
 
-    # 2) Download assets (slow, resumable)
     download_assets(records)
 
 if __name__ == "__main__":
