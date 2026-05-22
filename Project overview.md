@@ -71,11 +71,29 @@ The encoders will be used to build classifiers, which will be evaluated on their
 
 ### SRKW call-type datasets (testing - task #3)
 
-This dataset is part of the DCLDE dataset, but will be excluded from the training set in order to be used in this task. Specifically, is comprised of the subset of files recorded by JASCO/ONC/ECHO in Robert's Bank. Audio segments will be extracted around the calls that have been annotated to the call-type level.
+This dataset is part of the DCLDE dataset, but will be excluded from the training set in order to be used in this task. Specifically, it includes the subset of files recorded by JASCO/ONC/ECHO in Robert's Bank. Audio segments will be extracted around the calls that have been annotated to the call-type level.
 
 In addition, the HALLO SRKW call catalogue will be used as a reference.
 
 In task 3, call-type classifiers will be built using a similarity ranking strategy, where the encoders are used to produce embeddings for each input (calls from Robert's Bank) and then are compared to the embeddings from the reference catalogue. Finally, the similarity indices are ranked to produce the likely call-type.
+
+## Overview of methods
+
+### Pre-processing
+
+Data will be organized into HDF5 databases containing training, validation, tuning (if relevant to the task), and testing sets. 
+
+Within the databases, audio clips will be stored in their time-domain representation (Float 32 one-dimensional arrays) of the specific duration (2, 5, 20s) and sampling rate.
+
+
+The transformation from the time domain to a time-frequency representation will occur at training/inference time.
+
+### Encoder training
+
+Ecoders will be trained in a self-supervised manner using variational autoencoders. 
+
+
+
 
 
 
