@@ -1,6 +1,8 @@
 #   project ignores
 data_raw/
 data/
+configs/
+outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

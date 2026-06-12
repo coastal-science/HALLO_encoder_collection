@@ -1,0 +1,7 @@
+dataset_root: /path/to/DCLDE_2027
+output_root: outputs/dclde_2027_manifests
+exclude_holdout_rules:
+  - provider: JASCO_VFPA_ONC
+    dataset: StraitofGeorgia
+    audio_dir: vfpa/audio/straitofgeorgia_globus-robertsbank
+    annotation_path: vfpa/annotations/annot_RB_man_det.csv

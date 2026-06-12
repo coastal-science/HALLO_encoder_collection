@@ -45,6 +45,35 @@ This dataset included clips of marine mammal vocalizations, mostly in the 1 kHz 
 It contains data from a variety of locations/instruments, and will be used as the main source of training data.
 The "Robert's Bank" subset will be excluded from training, because it will be used for testing (task #3) 
 
+#### Source annotation tables
+
+The shared source-table builder creates the DCLDE audio and annotation manifests
+used as the base for downstream encoder experiments. It indexes source audio,
+normalizes `Annotations.csv`, holds out the Robert's Bank task-3 subset, and
+writes strict task-3 call-type rows without loading full audio waveforms.
+
+```bash
+mkdir -p configs
+cp example_configs/dclde_2027_source_tables.yaml configs/dclde_2027_source_tables.yaml
+```
+
+Edit `configs/dclde_2027_source_tables.yaml` so `dataset_root` points to your
+local DCLDE 2027 dataset.
+
+```bash
+python -m dclde.source_tables.build_source_tables \
+  --config configs/dclde_2027_source_tables.yaml
+```
+
+The config writes:
+
+- `outputs/dclde_2027_manifests/audio_inventory.csv`: one row per readable source audio file, with provider/dataset labels and audio metadata.
+- `outputs/dclde_2027_manifests/training_annotations.csv`: non-holdout DCLDE annotations available for training.
+- `outputs/dclde_2027_manifests/task3_roberts_bank.csv`: all configured Robert's Bank holdout annotations for task 3, including validation and strict-filter fields.
+- `outputs/dclde_2027_manifests/task3_roberts_bank_strict.csv`: task-3 subset restricted to confident SRKW catalogue-style call types.
+- `outputs/dclde_2027_manifests/rejects.csv`: annotation rows excluded because required audio or annotation timing could not be validated.
+- `outputs/dclde_2027_manifests/metadata.json`: build timestamp, source root, config hash, and summary row counts.
+
 ### Antarctic Blue (and fin) whales (testing - task #1)
 
 Described in [Miller et al (2021)](https://rdcu.be/fj89R). This dataset contains recordings from multiple instruments/locations. It also contains call-level annotations for blue and fin whales. In other words, the start and end times of calls within the audio file are indicated alongside the call label.
@@ -93,11 +122,6 @@ The transformation from the time domain to a time-frequency representation will 
 ### Encoder training
 
 Ecoders will be trained in a self-supervised manner using variational autoencoders. 
-
-
-
-
-
 
 
 
