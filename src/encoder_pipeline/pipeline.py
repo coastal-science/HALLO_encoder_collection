@@ -17,6 +17,9 @@ def run_pipeline(config: PipelineConfig) -> None:
     if config.embeddings.mlflow_id is None:
         dataset_path = run_preprocessor(config.preprocessor, config.data_dir)
         run_id, dataloaders = run_model_trainer(config.model_trainer, dataset_path, config.data_dir)
+        if config.model_trainer.tune is not None and config.model_trainer.tune.enabled:
+            print("model_trainer.tune enabled, skipping embeddings .")
+            return
     elif config.embeddings.reuse_embeddings:
         run_id = config.embeddings.mlflow_id
         dataloaders = None

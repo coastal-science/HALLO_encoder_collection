@@ -125,10 +125,55 @@ class ClassifierConfig(StrictBaseModel):
 
 
 class SearchParam(StrictBaseModel):
-    """One hyperparameter's Ray Tune search domain: `values` is the argument
-    list for tune.<domain>, e.g. {domain: loguniform, values: [1e-5, 1e-2]} or
-    {domain: choice, values: [adam, sgd]}. Keyed in RayTuneConfig.search_space
-    by a dotted path into ModelTrainerConfig, e.g. 'classifier.lr'."""
+    """One hyperparameter's Ray Tune search domain: set exactly one field,
+    named for the tune.<domain> sampler, to its argument list -- e.g.
+    {loguniform: [1e-5, 1e-2]} or {choice: [adam, sgd]}. Keyed in
+    RayTuneConfig.search_space by a dotted path into ModelTrainerConfig,
+    e.g. 'classifier.lr'. choice / grid_search take the list as-is; the
+    numeric domains splat it, so [low, high]."""
 
-    domain: Literal["choice", "grid_search", "uniform", "loguniform", "randint"]
-    values: list
+    choice: Optional[list] = None
+    grid_search: Optional[list] = None
+    uniform: Optional[list] = None
+    loguniform: Optional[list] = None
+    randint: Optional[list] = None
+
+
+class RayTuneConfig(StrictBaseModel):
+    """Ray Tune search over the classifier paradigm; consumed by
+    model_trainer.hpo.run_tuning when enabled."""
+
+    enabled: bool = False
+    search_space: dict[str, SearchParam] = {}
+    """Dotted ModelTrainerConfig path -> SearchParam, e.g.
+    {'classifier.lr': {loguniform: [1e-5, 1e-2]}}."""
+    metric: str = "val_loss"
+    """Reported metric ASHA and get_best_result rank on."""
+    mode: Literal["min", "max"] = "min"
+    num_samples: int = 16
+    max_concurrent_trials: Optional[int] = None
+    grace_period: int = 1
+    """ASHA: min training_iteration before a trial can be stopped."""
+    reduction_factor: int = 3
+    """ASHA: keep 1/reduction_factor of trials at each rung."""
+    resources_per_trial: dict[str, float] = {"cpu": 4, "gpu": 1}
+    storage_path: Optional[str] = None
+    """Ray Tune results dir; None -> <data_dir>/model_trainer/ray_tune."""
+
+
+class ModelTrainerConfig(StrictBaseModel):
+    run_name: Optional[str] = None
+    """MLflow sub-run name. If unset, MLflow auto-generates one."""
+    dataloader: DataLoaderConfig = DataLoaderConfig()
+    paradigm: Literal["simclr", "moco", "moco_v3", "classifier"] = "simclr"
+    """Which Trainer train_model runs."""
+    simclr: SimCLRConfig = SimCLRConfig()
+    moco: Optional[MoCoConfig] = None
+    """Required when paradigm == 'moco'."""
+    moco_v3: Optional[MoCoV3Config] = None
+    """Required when paradigm == 'moco_v3'."""
+    classifier: Optional[ClassifierConfig] = None
+    """Required when paradigm == 'classifier'."""
+    tune: Optional[RayTuneConfig] = None
+    """Ray Tune search config; when set with enabled=True the pipeline runs an
+    HPO sweep over the classifier paradigm instead of a single fit."""

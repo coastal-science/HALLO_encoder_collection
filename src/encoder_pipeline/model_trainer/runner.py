@@ -1,6 +1,7 @@
 import argparse
 import pickle
 from pathlib import Path
+from typing import Optional
 
 import mlflow
 from torch.utils.data import DataLoader
@@ -9,12 +10,13 @@ from encoder_pipeline.common.config_utils import load_pipeline_config
 from encoder_pipeline.common.mlflow_utils import configure_mlflow, download_artifact, flatten_params
 from encoder_pipeline.model_trainer.config import ModelTrainerConfig
 from encoder_pipeline.model_trainer.data_loader import build_dataloaders
+from encoder_pipeline.model_trainer.hpo import run_tuning
 from encoder_pipeline.model_trainer.train import train_model
 
 
 def run_model_trainer(
     config: ModelTrainerConfig, dataset_path: str, data_dir: str,
-) -> tuple[str, list[dict[str, DataLoader]]]:
+) -> tuple[str, Optional[list[dict[str, DataLoader]]]]:
     # search for dataset on mlflow
     matches = mlflow.search_runs(
         filter_string=f"params.dataset_path = '{dataset_path}'", order_by=["start_time ASC"], max_results=1,
@@ -29,10 +31,17 @@ def run_model_trainer(
     else:
         print(f"no preprocessor run found for dataset_path={dataset_path} -- training without a spectrogram_config")
 
-    def _train() -> tuple[str, list[dict[str, DataLoader]]]:
+    def _train() -> tuple[str, Optional[list[dict[str, DataLoader]]]]:
         with mlflow.start_run(nested=parent_run_id is not None, run_name=config.run_name) as run:
             mlflow.log_params(flatten_params("model_trainer", config.model_dump()))
             mlflow.log_param("dataset_path", dataset_path)
+            if config.tune is not None and config.tune.enabled:
+                run_tuning(
+                    config, dataset_path, data_dir, run.info.run_id,
+                    mlflow.get_tracking_uri(), mlflow.get_experiment(run.info.experiment_id).name,
+                    spectrogram_config,
+                )
+                return run.info.run_id, None
             dataloaders = build_dataloaders(dataset_path, config.dataloader, data_dir)
             train_model(config, dataloaders, data_dir, spectrogram_config)
             return run.info.run_id, dataloaders

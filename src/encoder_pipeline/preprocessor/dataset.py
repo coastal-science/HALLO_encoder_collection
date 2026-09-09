@@ -84,7 +84,7 @@ class Dataset:
         # exit early if already materialized
         if self.is_materialized and not force_rebuild:
             return
-        
+        # create raw tmp ds to allow for failure cases
         tmp_path = f"{self.out_file}.tmp"
         raw_path = f"{self.out_file}.raw.tmp"
         Path(self.out_file).parent.mkdir(parents=True, exist_ok=True)
