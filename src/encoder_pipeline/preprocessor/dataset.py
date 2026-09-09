@@ -1,6 +1,6 @@
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import h5py
 import pandas as pd
@@ -80,19 +80,20 @@ class Dataset:
             results.append({**row, "spec": spec.apply_dynamic(annotation, raw)})
         return results
 
-    def build_hdf5(self, force_rebuild: bool = False) -> str:
-        """"""
+    def build_hdf5(self, force_rebuild: bool = False) -> Union[str, None]:
         # exit early if already materialized
         if self.is_materialized and not force_rebuild:
             return
         
         tmp_path = f"{self.out_file}.tmp"
+        raw_path = f"{self.out_file}.raw.tmp"
         Path(self.out_file).parent.mkdir(parents=True, exist_ok=True)
         df = self._load_annotations().reset_index(drop=True)
         grouped = df.groupby(self.dataset_config.local_file_col)
         metadata_columns = self.dataset_config.metadata_columns or list(df.columns)
         metadata: dict[str, list] = {col: [None] * len(df) for col in metadata_columns}
-        with h5py.File(tmp_path, "w") as h5, ProcessPoolExecutor(max_workers=self.dataset_config.resolve_max_workers()) as pool:
+        with h5py.File(tmp_path, "w") as h5, h5py.File(raw_path, "w") as h5raw, \
+                ProcessPoolExecutor(max_workers=self.dataset_config.resolve_max_workers()) as pool:
             n_rows_by_future = {
                 pool.submit(
                     Dataset._process_file,
@@ -105,18 +106,22 @@ class Dataset:
             specs_raw = None
             valid_indices: set[int] = set()
             with tqdm(total=len(df), desc="computing spectrograms", unit="row") as pbar:
-                for future in as_completed(n_rows_by_future):
-                    for result in future.result():
+                for future in as_completed(list(n_rows_by_future)):
+                    # pop + del as we go
+                    n_rows = n_rows_by_future.pop(future)
+                    results = future.result()
+                    for result in results:
                         # create hdf5 dataset to fill in with the rest of the spectrogram data
                         if specs_raw is None:
-                            specs_raw = h5.create_dataset("spec_raw", shape=(len(df), *result["spec"].shape), dtype=result["spec"].dtype)
+                            specs_raw = h5raw.create_dataset("spec_raw", shape=(len(df), *result["spec"].shape), dtype=result["spec"].dtype)
                         # insert row in correct index (as_completed(futures) may not be in same order as df)
                         row_index = result["_row_index"]
                         specs_raw[row_index] = result["spec"]
                         valid_indices.add(row_index)
                         for col in metadata_columns:
                             metadata[col][row_index] = result[col]
-                    pbar.update(n_rows_by_future[future])
+                    pbar.update(n_rows)
+                    del results, future
 
             if specs_raw is None:
                 raise ValueError("every row's Annotation failed -- nothing to write, see preceding skip logs")
@@ -129,7 +134,6 @@ class Dataset:
             specs = h5.create_dataset("spec", shape=(len(valid_indices), *specs_raw.shape[1:]), dtype=specs_raw.dtype)
             for new_pos, old_pos in tqdm(list(enumerate(valid_indices)), desc="writing hdf5", unit="row"):
                 specs[new_pos] = specs_raw[old_pos]
-            del h5["spec_raw"]
             for col, values in metadata.items():
                 metadata[col] = [values[i] for i in valid_indices]
             # finnally add in all other metadata cols
@@ -138,5 +142,6 @@ class Dataset:
                     h5.create_dataset(col, data=values)
                 else:
                     h5.create_dataset(col, data=[str(v) for v in values], dtype=h5py.string_dtype())
+        Path(raw_path).unlink(missing_ok=True)
         Path(tmp_path).rename(self.out_file)
         self.is_materialized = True

@@ -1,7 +1,7 @@
 import math
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import mlflow
 import numpy as np
@@ -21,6 +21,21 @@ from encoder_pipeline.model_trainer.augment import SpectrogramClassifierAugment,
 from encoder_pipeline.preprocessor.config import SpectrogramConfig
 
 
+def build_optimizer(
+    name: str, params, lr: float, weight_decay: float, momentum: float = 0.0,
+) -> torch.optim.Optimizer:
+    """torch optimizer by name; momentum applies to sgd / rmsprop only."""
+    if name == "adam":
+        return torch.optim.Adam(params, lr=lr, weight_decay=weight_decay)
+    if name == "adamw":
+        return torch.optim.AdamW(params, lr=lr, weight_decay=weight_decay)
+    if name == "sgd":
+        return torch.optim.SGD(params, lr=lr, weight_decay=weight_decay, momentum=momentum)
+    if name == "rmsprop":
+        return torch.optim.RMSprop(params, lr=lr, weight_decay=weight_decay, momentum=momentum)
+    raise ValueError(f"unknown optimizer {name!r}")
+
+
 class Trainer(ABC):
     model: nn.Module
     optimizer: torch.optim.Optimizer
@@ -30,20 +45,30 @@ class Trainer(ABC):
     def fit(
         self, loaders: dict[str, DataLoader], fold: int, data_dir: str,
         spectrogram_config: Optional[SpectrogramConfig] = None,
-    ) -> None:
+        on_epoch_end: Optional[Callable[[int, dict[str, float]], None]] = None,
+    ) -> dict[str, float]:
+        """Trains for self.epochs, then returns the last epoch's losses merged
+        with the post-fit eval metrics. on_epoch_end, if given, is called after
+        every epoch with (epoch, {metric: value}) -- the final call also carries
+        the eval metrics -- for live reporting to an HPO scheduler."""
         out_dir = Path(f"{data_dir}/model_trainer/{mlflow.active_run().info.run_id}")
         out_dir.mkdir(parents=True, exist_ok=True)
         best_path = out_dir / f"fold{fold}_best.pt"
         best_val_loss = math.inf
+        epoch_losses: dict[str, float] = {}
         for epoch in tqdm(range(self.epochs)):
             train_loss = self._run_epoch(loaders["train"], train=True)
             mlflow.log_metric(f"fold{fold}_train_loss", train_loss, step=epoch)
+            epoch_losses = {"train_loss": train_loss}
             if "val" in loaders:
                 val_loss = self._run_epoch(loaders["val"], train=False)
                 mlflow.log_metric(f"fold{fold}_val_loss", val_loss, step=epoch)
+                epoch_losses["val_loss"] = val_loss
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     torch.save({"model": self.model, "spectrogram_config": spectrogram_config}, best_path)
+            if on_epoch_end is not None and epoch < self.epochs - 1:
+                on_epoch_end(epoch, epoch_losses)
 
         last_path = out_dir / f"fold{fold}_last.pt"
         torch.save({"model": self.model, "spectrogram_config": spectrogram_config}, last_path)
@@ -53,8 +78,16 @@ class Trainer(ABC):
             mlflow.log_artifact(str(best_path))
             self.model.load_state_dict(torch.load(best_path, weights_only=False)["model"].state_dict())
 
-        for key, value in self._evaluate(loaders).items():
+        eval_metrics = self._evaluate(loaders)
+        for key, value in eval_metrics.items():
             mlflow.log_metric(f"fold{fold}_{key}", value)
+
+        results = {**epoch_losses, **eval_metrics}
+        if "val" in loaders:
+            results["best_val_loss"] = best_val_loss
+        if on_epoch_end is not None:
+            on_epoch_end(self.epochs - 1, results)
+        return results
 
     @abstractmethod
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
@@ -177,7 +210,9 @@ class ClassifierTrainer(Trainer):
         self.model = ClassifierModel(config, num_classes).to(self.device)
         self.augment = SpectrogramClassifierAugment(config.augment)
         self.criterion = nn.CrossEntropyLoss()
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+        self.optimizer = build_optimizer(
+            config.optimizer, self.model.parameters(), config.lr, config.weight_decay, config.momentum,
+        )
 
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
         self.model.train(train)
@@ -217,24 +252,46 @@ class ClassifierTrainer(Trainer):
         return metrics
 
 
+def _mean_metrics(fold_results: list[dict[str, float]]) -> dict[str, float]:
+    """Mean of each metric across folds; a key present in only some folds is
+    averaged over those folds."""
+    keys = {key for result in fold_results for key in result}
+    return {key: float(np.mean([r[key] for r in fold_results if key in r])) for key in keys}
+
+
 def train_model(
     config: ModelTrainerConfig, dataloaders: list[dict[str, DataLoader]], data_dir: str,
     spectrogram_config: Optional[SpectrogramConfig] = None,
-) -> None:
+    on_epoch_end: Optional[Callable[[int, dict[str, float]], None]] = None,
+) -> dict[str, float]:
+    """Fits every fold with the paradigm's Trainer; returns its metrics averaged
+    across folds. on_epoch_end is forwarded to the classifier Trainer for HPO
+    live reporting (the SSL paradigms ignore it)."""
     if config.paradigm == "simclr":
         assert config.simclr is not None, "model_trainer.simclr config is required when paradigm is 'simclr'"
-        for fold, loaders in enumerate(dataloaders):
+        results = [
             SimCLRTrainer(config.simclr).fit(loaders, fold, data_dir, spectrogram_config)
+            for fold, loaders in enumerate(dataloaders)
+        ]
     elif config.paradigm == "moco":
         assert config.moco is not None, "model_trainer.moco config is required when paradigm is 'moco'"
-        for fold, loaders in enumerate(dataloaders):
+        results = [
             MoCoTrainer(config.moco).fit(loaders, fold, data_dir, spectrogram_config)
+            for fold, loaders in enumerate(dataloaders)
+        ]
     elif config.paradigm == "moco_v3":
         assert config.moco_v3 is not None, "model_trainer.moco_v3 config is required when paradigm is 'moco_v3'"
-        for fold, loaders in enumerate(dataloaders):
+        results = [
             MoCoV3Trainer(config.moco_v3).fit(loaders, fold, data_dir, spectrogram_config)
+            for fold, loaders in enumerate(dataloaders)
+        ]
     else:
         assert config.classifier is not None, "model_trainer.classifier config is required when paradigm is 'classifier'"
         num_classes = len(next(iter(dataloaders[0].values())).dataset.dataset.classes)
-        for fold, loaders in enumerate(dataloaders):
-            ClassifierTrainer(config.classifier, num_classes).fit(loaders, fold, data_dir, spectrogram_config)
+        results = [
+            ClassifierTrainer(config.classifier, num_classes).fit(
+                loaders, fold, data_dir, spectrogram_config, on_epoch_end,
+            )
+            for fold, loaders in enumerate(dataloaders)
+        ]
+    return _mean_metrics(results)

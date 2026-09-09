@@ -116,21 +116,19 @@ class ClassifierConfig(StrictBaseModel):
     backbone_name: backbone = "resnet18"
     augment: SpectrogramClassifierAugmentConfig = SpectrogramClassifierAugmentConfig()
     epochs: int = 10
+    optimizer: Literal["adam", "adamw", "sgd", "rmsprop"] = "adam"
     lr: float = 3e-4
     weight_decay: float = 1e-6
+    momentum: float = 0.9
+    """SGD / RMSprop momentum; ignored by adam / adamw."""
     device: str = Field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
 
 
-class ModelTrainerConfig(StrictBaseModel):
-    run_name: Optional[str] = None
-    """MLflow sub-run name. If unset, MLflow auto-generates one."""
-    dataloader: DataLoaderConfig = DataLoaderConfig()
-    paradigm: Literal["simclr", "moco", "moco_v3", "classifier"] = "simclr"
-    """Which Trainer train_model runs."""
-    simclr: SimCLRConfig = SimCLRConfig()
-    moco: Optional[MoCoConfig] = None
-    """Required when paradigm == 'moco'."""
-    moco_v3: Optional[MoCoV3Config] = None
-    """Required when paradigm == 'moco_v3'."""
-    classifier: Optional[ClassifierConfig] = None
-    """Required when paradigm == 'classifier'."""
+class SearchParam(StrictBaseModel):
+    """One hyperparameter's Ray Tune search domain: `values` is the argument
+    list for tune.<domain>, e.g. {domain: loguniform, values: [1e-5, 1e-2]} or
+    {domain: choice, values: [adam, sgd]}. Keyed in RayTuneConfig.search_space
+    by a dotted path into ModelTrainerConfig, e.g. 'classifier.lr'."""
+
+    domain: Literal["choice", "grid_search", "uniform", "loguniform", "randint"]
+    values: list

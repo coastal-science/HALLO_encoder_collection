@@ -2,7 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from encoder_pipeline.evaluation.metrics import classification_metrics
+# TODO: also implement retrieval AUC for raw embeddings as an additional embedding evaluation method.
+from encoder_pipeline.evaluation.metrics import classification_metrics, per_class_metrics
 
 
 def remap_labels(
@@ -29,7 +30,9 @@ class LinearProbe:
         self.epochs = epochs
         self.lr = lr
 
-    def evaluate(self, embeddings: dict[str, tuple[np.ndarray, np.ndarray]]) -> tuple[dict[str, float], dict[str, list[float]]]:
+    def evaluate(
+        self, embeddings: dict[str, tuple[np.ndarray, np.ndarray]], class_names: list[str],
+    ) -> tuple[dict[str, float], dict[str, list[float]]]:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         tensors = {
             split: (torch.tensor(x, dtype=torch.float32, device=device), torch.tensor(y, dtype=torch.long, device=device))
@@ -65,4 +68,7 @@ class LinearProbe:
                 metrics[f"{split}_accuracy"] = float((y_pred == y_true).mean())
                 for name, value in classification_metrics(y_true, y_pred, y_score).items():
                     metrics[f"{split}_{name}"] = value
+                if split == "test":
+                    for name, value in per_class_metrics(y_true, y_pred, y_score, class_names).items():
+                        metrics[f"test_{name}"] = value
         return metrics, loss_curves

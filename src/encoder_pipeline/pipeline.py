@@ -17,6 +17,9 @@ def run_pipeline(config: PipelineConfig) -> None:
     if config.embeddings.mlflow_id is None:
         dataset_path = run_preprocessor(config.preprocessor, config.data_dir)
         run_id, dataloaders = run_model_trainer(config.model_trainer, dataset_path, config.data_dir)
+    elif config.embeddings.reuse_embeddings:
+        run_id = config.embeddings.mlflow_id
+        dataloaders = None
     else:
         run_id = config.embeddings.mlflow_id
         dataset_path = mlflow.get_run(run_id).data.params["dataset_path"]

@@ -16,7 +16,9 @@ dependencies = [
   "torchvision",
   "lightly",
   "loguru",
-  "tqdm"
+  "librosa",
+  "tqdm",
+  "perch_hoplite"
 ]
 
 [project.scripts]
@@ -24,6 +26,7 @@ run-preprocessor = "encoder_pipeline.preprocessor.runner:main"
 run-model-trainer = "encoder_pipeline.model_trainer.runner:main"
 run-embeddings = "encoder_pipeline.embeddings.runner:main"
 run-pipeline = "encoder_pipeline.pipeline:main"
+
 
 [build-system]
 requires = ["hatchling"]

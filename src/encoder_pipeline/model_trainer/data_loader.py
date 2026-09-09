@@ -146,16 +146,23 @@ def build_dataloaders(hdf5_path: str, config: DataLoaderConfig, data_dir: str) -
     dataset = SpectrogramDataset(hdf5_path, class_label_map=config.class_label_map)
 
     def loader(name: str, idx: np.ndarray) -> DataLoader:
+        # keep the GPU fed: parallel HDF5 reads, pinned host buffers, workers
+        # kept alive across epochs (matters at 200 epochs).
+        mem_kwargs = dict(
+            num_workers=config.num_workers,
+            pin_memory=True,
+            persistent_workers=config.num_workers > 0,
+        )
         if name == "train" and config.oversample:
             return DataLoader(
                 Subset(dataset, idx), batch_size=config.batch_size,
                 sampler=class_balanced_sampler(
                     dataset.labels, idx, dataset.classes, config.oversample_background_label,
                 ),
-                num_workers=config.num_workers,
+                **mem_kwargs,
             )
         return DataLoader(
-            Subset(dataset, idx), batch_size=config.batch_size, shuffle=config.shuffle, num_workers=config.num_workers,
+            Subset(dataset, idx), batch_size=config.batch_size, shuffle=config.shuffle, **mem_kwargs,
         )
 
     return [{name: loader(name, idx) for name, idx in split.items()} for split in splits]
