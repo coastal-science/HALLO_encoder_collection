@@ -79,7 +79,12 @@ def run_tuning(
     assert config.classifier is not None, "model_trainer.classifier is required when tune is enabled"
     assert config.dataloader.n_folds == 1, "model_trainer.tune expects dataloader.n_folds == 1"
 
-    base = config.model_copy(update={"tune": RayTuneConfig()})
+    dataset_path = str(Path(dataset_path).resolve())
+    data_dir = str(Path(data_dir).resolve())
+
+    base = config.model_copy(update={"tune": RayTuneConfig()}, deep=True)
+    if base.dataloader.splits_path:
+        base.dataloader.splits_path = str(Path(base.dataloader.splits_path).resolve())
 
     def trainable(sample: dict[str, Any]) -> None:
         mlflow.set_tracking_uri(tracking_uri)

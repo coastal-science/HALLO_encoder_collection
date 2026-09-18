@@ -36,7 +36,7 @@ def flatten_params(prefix: str, obj: dict) -> dict:
 
 def download_artifact(root_path: str, run_id: str, artifact_path: str | None = None) -> Path:
     """Downloads an artifact from mlflow if not already cached locally."""
-    local_dir = Path(root_path) / run_id
+    local_dir = Path(root_path) / "artifact_cache" / run_id
     local_path = local_dir / artifact_path if artifact_path else local_dir
     if local_path.exists():
         return local_path

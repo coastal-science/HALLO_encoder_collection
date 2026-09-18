@@ -5,7 +5,9 @@ import pytest
 import torch
 
 from encoder_pipeline.model_trainer.config import DataLoaderConfig
-from encoder_pipeline.model_trainer.data_loader import class_balanced_sampler, compute_splits, load_saved_splits
+from encoder_pipeline.model_trainer.data_loader import (
+    class_balanced_sampler, compute_splits, holdout_val_from_train, load_saved_splits,
+)
 
 
 @pytest.fixture
@@ -93,6 +95,30 @@ def test_no_col_to_group_by_splits_row_by_row(hdf5_path):
 
     assert len(split["test"]) == 2
     assert len(split["train"]) + len(split["test"]) == 8
+
+
+def test_holdout_val_from_train_carves_a_group_disjoint_val_and_leaves_test(hdf5_path):
+    config = DataLoaderConfig(val_from_train_size=0.25, split_seed=0, col_to_group_by="file_id")
+    test_idx = np.array([6, 7])
+    [split] = holdout_val_from_train(hdf5_path, [{"train": np.arange(6), "test": test_idx}], config)
+    groups = _groups(hdf5_path, "file_id")
+
+    assert list(split["test"]) == list(test_idx)  # untouched
+    assert sorted(np.concatenate([split["train"], split["val"]])) == list(range(6))
+    assert not set(groups[split["train"]]) & set(groups[split["val"]])
+    assert len(split["val"]) > 0
+
+
+def test_holdout_val_from_train_is_a_noop_when_the_fold_already_has_val(hdf5_path):
+    config = DataLoaderConfig(val_from_train_size=0.25, split_seed=0, col_to_group_by="file_id")
+    folds = [{"train": np.arange(4), "val": np.array([4, 5]), "test": np.array([6, 7])}]
+    assert holdout_val_from_train(hdf5_path, folds, config) is folds
+
+
+def test_holdout_val_from_train_is_a_noop_when_disabled(hdf5_path):
+    config = DataLoaderConfig(val_from_train_size=0.0, col_to_group_by="file_id")
+    folds = [{"train": np.arange(6), "test": np.array([6, 7])}]
+    assert holdout_val_from_train(hdf5_path, folds, config) is folds
 
 
 def test_class_balanced_sampler_evens_out_a_skewed_train_split():

@@ -9,6 +9,7 @@ import torch
 from sklearn.model_selection import KFold, train_test_split
 from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 
+from encoder_pipeline.common.file_utils import resolve_cpu_workers
 from encoder_pipeline.model_trainer.config import DataLoaderConfig
 
 
@@ -99,6 +100,37 @@ def load_saved_splits(hdf5_path: str, splits_path: str, uid_col: str = "uid") ->
     return splits
 
 
+def holdout_val_from_train(
+    hdf5_path: str, splits: list[dict[str, np.ndarray]], config: DataLoaderConfig,
+) -> list[dict[str, np.ndarray]]:
+    """Holds config.val_from_train_size of the train groups out as val for any
+    fold lacking one, grouped by config.col_to_group_by."""
+    if config.val_from_train_size <= 0 or all(len(split.get("val", ())) for split in splits):
+        return splits
+
+    with h5py.File(hdf5_path, "r") as h5:
+        n = h5["spec"].shape[0]
+        groups = h5[config.col_to_group_by].asstr()[:] if config.col_to_group_by else np.arange(n)
+
+    out = []
+    for split in splits:
+        if len(split.get("val", ())):
+            out.append(split)
+            continue
+        train_idx = split["train"]
+        keep_groups, val_groups = train_test_split(
+            np.unique(groups[train_idx]),
+            test_size=config.val_from_train_size,
+            random_state=config.split_seed,
+        )
+        out.append({
+            **split,
+            "train": train_idx[np.isin(groups[train_idx], keep_groups)],
+            "val": train_idx[np.isin(groups[train_idx], val_groups)],
+        })
+    return out
+
+
 def save_splits(hdf5_path: str, splits: list[dict[str, np.ndarray]], out_dir: str, uid_col: str = "uid") -> str:
     with h5py.File(hdf5_path, "r") as h5:
         dset = h5[uid_col]
@@ -140,6 +172,7 @@ def class_balanced_sampler(
 
 def build_dataloaders(hdf5_path: str, config: DataLoaderConfig, data_dir: str) -> list[dict[str, DataLoader]]:
     splits = load_saved_splits(hdf5_path, config.splits_path) if config.splits_path else compute_splits(hdf5_path, config)
+    splits = holdout_val_from_train(hdf5_path, splits, config)
     splits_path = save_splits(hdf5_path, splits, out_dir=f"{data_dir}/model_trainer/{mlflow.active_run().info.run_id}")
     mlflow.log_artifact(splits_path)
 
@@ -148,10 +181,11 @@ def build_dataloaders(hdf5_path: str, config: DataLoaderConfig, data_dir: str) -
     def loader(name: str, idx: np.ndarray) -> DataLoader:
         # keep the GPU fed: parallel HDF5 reads, pinned host buffers, workers
         # kept alive across epochs (matters at 200 epochs).
+        num_workers = resolve_cpu_workers(config.num_workers)
         mem_kwargs = dict(
-            num_workers=config.num_workers,
+            num_workers=num_workers,
             pin_memory=True,
-            persistent_workers=config.num_workers > 0,
+            persistent_workers=num_workers > 0,
         )
         if name == "train" and config.oversample:
             return DataLoader(

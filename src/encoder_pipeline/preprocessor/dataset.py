@@ -5,6 +5,7 @@ from typing import Optional, Union
 import h5py
 import pandas as pd
 from loguru import logger
+from threadpoolctl import threadpool_limits
 from tqdm import tqdm
 
 from encoder_pipeline.common.file_utils import get_or_create_hashed_file
@@ -66,19 +67,20 @@ class Dataset:
         file_path: str, rows: list[dict], spec_config: SpectrogramConfig, audio_file_config: AudioFileConfig,
         annotation_config: AnnotationConfig,
     ) -> list[dict]:
-        audio_file = AudioFile(file_path, audio_file_config.resample_sr)
-        spec = Spectrogram(spec_config)
-        results = []
-        for row in rows:
-            try:
-                annotation = Annotation(audio_file, row["Labels"], row["FileBeginSec"], row["Duration"], annotation_config)
-            except ValueError as e:
-                logger.error("skipping row {} in {}: {}", row.get("uid", row["_row_index"]), file_path, e)
-                continue
-            raw = spec.compute_mel(annotation) if spec_config.freq_scale == "mel" else spec.compute_magnitude(annotation)
-            # append all cols with the specified row
-            results.append({**row, "spec": spec.apply_dynamic(annotation, raw)})
-        return results
+        with threadpool_limits(limits=1):
+            audio_file = AudioFile(file_path, audio_file_config.resample_sr)
+            spec = Spectrogram(spec_config)
+            results = []
+            for row in rows:
+                try:
+                    annotation = Annotation(audio_file, row["Labels"], row["FileBeginSec"], row["Duration"], annotation_config)
+                except ValueError as e:
+                    logger.error("skipping row {} in {}: {}", row.get("uid", row["_row_index"]), file_path, e)
+                    continue
+                raw = spec.compute_mel(annotation) if spec_config.freq_scale == "mel" else spec.compute_magnitude(annotation)
+                # append all cols with the specified row
+                results.append({**row, "spec": spec.apply_dynamic(annotation, raw)})
+            return results
 
     def build_hdf5(self, force_rebuild: bool = False) -> Union[str, None]:
         # exit early if already materialized

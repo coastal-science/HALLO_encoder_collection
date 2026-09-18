@@ -17,6 +17,7 @@ dependencies = [
   "lightly",
   "loguru",
   "librosa",
+  "threadpoolctl",
   "tqdm",
   "perch_hoplite",
   "ray[tune]>=2.43,<3"

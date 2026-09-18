@@ -1,7 +1,7 @@
-import os
 from typing import Literal, Optional
 
 from encoder_pipeline.common.base import StrictBaseModel
+from encoder_pipeline.common.file_utils import resolve_cpu_workers
 
 
 class AudioFileConfig(StrictBaseModel):
@@ -126,9 +126,9 @@ class DatasetConfig(StrictBaseModel):
     annotations before building the dataset. Their rows never enter the HDF5,
     so they're absent from every later split."""
     def resolve_max_workers(self) -> Optional[int]:
-        if self.max_workers is None or self.max_workers > 0:
-            return self.max_workers
-        return max(1, (os.cpu_count() or 1) + self.max_workers + 1)
+        if self.max_workers is None:
+            return None
+        return resolve_cpu_workers(self.max_workers, floor=1)
 
 
 class PreprocessorConfig(StrictBaseModel):

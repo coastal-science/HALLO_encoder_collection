@@ -41,20 +41,32 @@ class Trainer(ABC):
     optimizer: torch.optim.Optimizer
     device: torch.device
     epochs: int
+    amp: bool = False
+    max_grad_norm: Optional[float] = None
+    eval_every: Optional[int] = None
+
+    def _autocast(self) -> torch.autocast:
+        """bf16 autocast on self.device when self.amp is set, else a no-op."""
+        return torch.autocast(self.device.type, dtype=torch.bfloat16, enabled=self.amp)
+
+    def _optimizer_step(self, loss: torch.Tensor) -> None:
+        """Backward, optional global grad-norm clip, then optimizer step."""
+        self.optimizer.zero_grad()
+        loss.backward()
+        if self.max_grad_norm is not None:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_grad_norm)
+        self.optimizer.step()
 
     def fit(
         self, loaders: dict[str, DataLoader], fold: int, data_dir: str,
         spectrogram_config: Optional[SpectrogramConfig] = None,
         on_epoch_end: Optional[Callable[[int, dict[str, float]], None]] = None,
     ) -> dict[str, float]:
-        """Trains for self.epochs, then returns the last epoch's losses merged
-        with the post-fit eval metrics. on_epoch_end, if given, is called after
-        every epoch with (epoch, {metric: value}) -- the final call also carries
-        the eval metrics -- for live reporting to an HPO scheduler."""
         out_dir = Path(f"{data_dir}/model_trainer/{mlflow.active_run().info.run_id}")
         out_dir.mkdir(parents=True, exist_ok=True)
         best_path = out_dir / f"fold{fold}_best.pt"
         best_val_loss = math.inf
+        last_eval_best_val_loss = math.inf
         epoch_losses: dict[str, float] = {}
         for epoch in tqdm(range(self.epochs)):
             train_loss = self._run_epoch(loaders["train"], train=True)
@@ -67,6 +79,13 @@ class Trainer(ABC):
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
                     torch.save({"model": self.model, "spectrogram_config": spectrogram_config}, best_path)
+            if (
+                self.eval_every is not None and (epoch + 1) % self.eval_every == 0
+                and epoch < self.epochs - 1 and best_val_loss < last_eval_best_val_loss
+            ):
+                last_eval_best_val_loss = best_val_loss
+                for key, value in self._evaluate(loaders).items():
+                    mlflow.log_metric(f"fold{fold}_{key}", value, step=epoch)
             if on_epoch_end is not None and epoch < self.epochs - 1:
                 on_epoch_end(epoch, epoch_losses)
 
@@ -110,6 +129,8 @@ class SimCLRTrainer(Trainer):
         self.augment = SpectrogramSSLAugment(config.augment)
         self.criterion = NTXentLoss(temperature=config.temperature)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+        self.amp = config.amp
+        self.max_grad_norm = config.max_grad_norm
 
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
         self.model.train(train)
@@ -118,14 +139,12 @@ class SimCLRTrainer(Trainer):
             specs = specs.to(self.device)
             view0 = self.augment(specs).unsqueeze(1)
             view1 = self.augment(specs).unsqueeze(1)
-            with torch.set_grad_enabled(train):
+            with torch.set_grad_enabled(train), self._autocast():
                 z0 = self.model(view0)
                 z1 = self.model(view1)
                 loss = self.criterion(z0, z1)
-                if train:
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
+            if train:
+                self._optimizer_step(loss)
             total_loss += loss.item() * specs.size(0)
         return total_loss / len(loader.dataset)
 
@@ -142,6 +161,8 @@ class MoCoTrainer(Trainer):
             memory_bank_size=(config.memory_bank_size, config.projection_out_dim),
         )
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+        self.amp = config.amp
+        self.max_grad_norm = config.max_grad_norm
 
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
         self.model.train(train)
@@ -150,17 +171,15 @@ class MoCoTrainer(Trainer):
             specs = specs.to(self.device)
             query_view = self.augment(specs).unsqueeze(1)
             key_view = self.augment(specs).unsqueeze(1)
-            with torch.set_grad_enabled(train):
+            with torch.set_grad_enabled(train), self._autocast():
                 if train:
                     update_momentum(self.model.backbone, self.model.backbone_momentum, m=self.momentum)
                     update_momentum(self.model.projection_head, self.model.projection_head_momentum, m=self.momentum)
                 query = self.model(query_view)
                 key = self.model.forward_momentum(key_view)
                 loss = self.criterion(query, key)
-                if train:
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
+            if train:
+                self._optimizer_step(loss)
             total_loss += loss.item() * specs.size(0)
         return total_loss / len(loader.dataset)
 
@@ -174,6 +193,8 @@ class MoCoV3Trainer(Trainer):
         self.augment = SpectrogramSSLAugment(config.augment)
         self.criterion = NTXentLoss(temperature=config.temperature)
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
+        self.amp = config.amp
+        self.max_grad_norm = config.max_grad_norm
         self._step = 0
         self._total_steps = 0
 
@@ -186,7 +207,7 @@ class MoCoV3Trainer(Trainer):
             specs = specs.to(self.device)
             view0 = self.augment(specs).unsqueeze(1)
             view1 = self.augment(specs).unsqueeze(1)
-            with torch.set_grad_enabled(train):
+            with torch.set_grad_enabled(train), self._autocast():
                 if train:
                     momentum = cosine_schedule(self._step, self._total_steps, self.momentum_base, 1.0)
                     update_momentum(self.model.backbone, self.model.backbone_momentum, m=momentum)
@@ -195,10 +216,8 @@ class MoCoV3Trainer(Trainer):
                 query0, query1 = self.model(view0), self.model(view1)
                 key0, key1 = self.model.forward_momentum(view0), self.model.forward_momentum(view1)
                 loss = 0.5 * (self.criterion(query0, key1) + self.criterion(query1, key0))
-                if train:
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
+            if train:
+                self._optimizer_step(loss)
             total_loss += loss.item() * specs.size(0)
         return total_loss / len(loader.dataset)
 
@@ -213,6 +232,9 @@ class ClassifierTrainer(Trainer):
         self.optimizer = build_optimizer(
             config.optimizer, self.model.parameters(), config.lr, config.weight_decay, config.momentum,
         )
+        self.amp = config.amp
+        self.max_grad_norm = config.max_grad_norm
+        self.eval_every = config.eval_every
 
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
         self.model.train(train)
@@ -222,13 +244,11 @@ class ClassifierTrainer(Trainer):
             if train:
                 specs = self.augment(specs)
             specs, labels = specs.unsqueeze(1), labels.to(self.device)
-            with torch.set_grad_enabled(train):
+            with torch.set_grad_enabled(train), self._autocast():
                 logits = self.model(specs)
                 loss = self.criterion(logits, labels)
-                if train:
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
+            if train:
+                self._optimizer_step(loss)
             total_loss += loss.item() * specs.size(0)
         return total_loss / len(loader.dataset)
 

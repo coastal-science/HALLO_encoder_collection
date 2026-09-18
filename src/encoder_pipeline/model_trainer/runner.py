@@ -35,15 +35,20 @@ def run_model_trainer(
         with mlflow.start_run(nested=parent_run_id is not None, run_name=config.run_name) as run:
             mlflow.log_params(flatten_params("model_trainer", config.model_dump()))
             mlflow.log_param("dataset_path", dataset_path)
-            if config.tune is not None and config.tune.enabled:
-                run_tuning(
-                    config, dataset_path, data_dir, run.info.run_id,
-                    mlflow.get_tracking_uri(), mlflow.get_experiment(run.info.experiment_id).name,
-                    spectrogram_config,
-                )
-                return run.info.run_id, None
-            dataloaders = build_dataloaders(dataset_path, config.dataloader, data_dir)
-            train_model(config, dataloaders, data_dir, spectrogram_config)
+            dataloaders = None
+            try:
+                if config.tune is not None and config.tune.enabled:
+                    run_tuning(
+                        config, dataset_path, data_dir, run.info.run_id,
+                        mlflow.get_tracking_uri(), mlflow.get_experiment(run.info.experiment_id).name,
+                        spectrogram_config,
+                    )
+                else:
+                    dataloaders = build_dataloaders(dataset_path, config.dataloader, data_dir)
+                    train_model(config, dataloaders, data_dir, spectrogram_config)
+            except KeyboardInterrupt:
+                mlflow.set_tag("interrupted", "true")
+                print("model_trainer interrupted -- wrapping up this run and continuing to the next stage with the current best result.")
             return run.info.run_id, dataloaders
 
     if parent_run_id is not None:

@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import time
 from pathlib import Path
 
@@ -16,3 +17,11 @@ def get_or_create_hashed_file(out_dir: str, suffix: str, hash_params: dict) -> s
         return str(matches[0]), content_hash
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     return str(Path(out_dir) / f"{content_hash}_{timestamp}{suffix}"), content_hash
+
+
+def resolve_cpu_workers(n: int, floor: int = 0) -> int:
+    """joblib-style worker count: n >= 0 passes through, negative counts
+    back from cpu_count (-1 = all cores, -2 = all but one, ...)."""
+    if n >= 0:
+        return n
+    return max(floor, (os.cpu_count() or 1) + n + 1)

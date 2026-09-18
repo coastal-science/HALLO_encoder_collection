@@ -26,6 +26,8 @@ class DataLoaderConfig(StrictBaseModel):
     splits_path: Optional[str] = None
     """Local path to a previously-logged splits.csv to reuse instead of
     computing a fresh split. Unset = compute_splits as usual."""
+    val_from_train_size: float = 0.0
+    """Fraction of train groups held out as val when a fold has none."""
     oversample: bool = True
     """Oversample the train split so every class is drawn to the largest
     class's size each epoch, via a WeightedRandomSampler. Applies to any
@@ -70,6 +72,11 @@ class SimCLRConfig(StrictBaseModel):
     lr: float = 3e-4
     weight_decay: float = 1e-6
     device: str = Field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
+    amp: bool = False
+    """Mixed precision: bf16-autocast the forward / loss on self.device."""
+    max_grad_norm: Optional[float] = None
+    """Clip gradients to this global L2 norm before each optimizer step; None
+    disables clipping. Independent of amp."""
 
 
 class MoCoConfig(StrictBaseModel):
@@ -89,6 +96,11 @@ class MoCoConfig(StrictBaseModel):
     lr: float = 3e-4
     weight_decay: float = 1e-6
     device: str = Field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
+    amp: bool = False
+    """Mixed precision: bf16-autocast the forward / loss on self.device."""
+    max_grad_norm: Optional[float] = None
+    """Clip gradients to this global L2 norm before each optimizer step; None
+    disables clipping. Independent of amp."""
 
 
 class MoCoV3Config(StrictBaseModel):
@@ -108,6 +120,11 @@ class MoCoV3Config(StrictBaseModel):
     lr: float = 3e-4
     weight_decay: float = 1e-6
     device: str = Field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
+    amp: bool = False
+    """Mixed precision: bf16-autocast the forward / loss on self.device."""
+    max_grad_norm: Optional[float] = None
+    """Clip gradients to this global L2 norm before each optimizer step; None
+    disables clipping. Independent of amp."""
 
 
 class ClassifierConfig(StrictBaseModel):
@@ -122,15 +139,17 @@ class ClassifierConfig(StrictBaseModel):
     momentum: float = 0.9
     """SGD / RMSprop momentum; ignored by adam / adamw."""
     device: str = Field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
+    amp: bool = False
+    """Mixed precision: bf16-autocast the forward / loss on self.device."""
+    max_grad_norm: Optional[float] = None
+    """Clip gradients to this global L2 norm before each optimizer step; None
+    disables clipping. Independent of amp."""
+    eval_every: Optional[int] = None
+    """Every N epochs, log _evaluate's metrics (val / test) to mlflow Requires a val loader."""
 
 
 class SearchParam(StrictBaseModel):
-    """One hyperparameter's Ray Tune search domain: set exactly one field,
-    named for the tune.<domain> sampler, to its argument list -- e.g.
-    {loguniform: [1e-5, 1e-2]} or {choice: [adam, sgd]}. Keyed in
-    RayTuneConfig.search_space by a dotted path into ModelTrainerConfig,
-    e.g. 'classifier.lr'. choice / grid_search take the list as-is; the
-    numeric domains splat it, so [low, high]."""
+    """One hyperparameter's Ray Tune search domain: set exactly one field"""
 
     choice: Optional[list] = None
     grid_search: Optional[list] = None
@@ -176,4 +195,4 @@ class ModelTrainerConfig(StrictBaseModel):
     """Required when paradigm == 'classifier'."""
     tune: Optional[RayTuneConfig] = None
     """Ray Tune search config; when set with enabled=True the pipeline runs an
-    HPO sweep over the classifier paradigm instead of a single fit."""
+    HPO sweep"""
