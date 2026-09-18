@@ -3,7 +3,7 @@ name = "hallo-encoder-collection"
 version = "0.1.0"
 description = "Shared dataset and encoder tooling for underwater acoustic tasks."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
   "pandas>=2.2",
   "pyarrow>=15",
