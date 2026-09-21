@@ -146,6 +146,11 @@ class ClassifierConfig(StrictBaseModel):
     disables clipping. Independent of amp."""
     eval_every: Optional[int] = None
     """Every N epochs, log _evaluate's metrics (val / test) to mlflow Requires a val loader."""
+    lr_scheduler: bool = False
+    """Cosine-anneal lr from config.lr to lr_scheduler_min_lr over config.epochs
+    via torch.optim.lr_scheduler.CosineAnnealingLR."""
+    lr_scheduler_min_lr: float = 0.0
+    """Final lr at the end of cosine annealing; ignored when lr_scheduler is False."""
 
 
 class SearchParam(StrictBaseModel):

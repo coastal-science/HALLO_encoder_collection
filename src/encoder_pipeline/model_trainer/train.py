@@ -44,6 +44,7 @@ class Trainer(ABC):
     amp: bool = False
     max_grad_norm: Optional[float] = None
     eval_every: Optional[int] = None
+    scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None
 
     def _autocast(self) -> torch.autocast:
         """bf16 autocast on self.device when self.amp is set, else a no-op."""
@@ -72,6 +73,9 @@ class Trainer(ABC):
             train_loss = self._run_epoch(loaders["train"], train=True)
             mlflow.log_metric(f"fold{fold}_train_loss", train_loss, step=epoch)
             epoch_losses = {"train_loss": train_loss}
+            if self.scheduler is not None:
+                mlflow.log_metric(f"fold{fold}_lr", self.optimizer.param_groups[0]["lr"], step=epoch)
+                self.scheduler.step()
             if "val" in loaders:
                 val_loss = self._run_epoch(loaders["val"], train=False)
                 mlflow.log_metric(f"fold{fold}_val_loss", val_loss, step=epoch)
@@ -231,6 +235,12 @@ class ClassifierTrainer(Trainer):
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = build_optimizer(
             config.optimizer, self.model.parameters(), config.lr, config.weight_decay, config.momentum,
+        )
+        self.scheduler = (
+            torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer, T_max=config.epochs, eta_min=config.lr_scheduler_min_lr,
+            )
+            if config.lr_scheduler else None
         )
         self.amp = config.amp
         self.max_grad_norm = config.max_grad_norm

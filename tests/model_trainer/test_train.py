@@ -33,6 +33,20 @@ def test_classifier_trainer_builds_the_configured_optimizer():
     assert trainer.optimizer.param_groups[0]["momentum"] == 0.95
 
 
+def test_classifier_trainer_scheduler_defaults_off():
+    trainer = ClassifierTrainer(ClassifierConfig(device="cpu"), num_classes=3)
+    assert trainer.scheduler is None
+
+
+def test_classifier_trainer_scheduler_cosine_anneals_lr_to_min():
+    config = ClassifierConfig(device="cpu", lr=1e-2, epochs=4, lr_scheduler=True, lr_scheduler_min_lr=1e-4)
+    trainer = ClassifierTrainer(config, num_classes=3)
+    assert isinstance(trainer.scheduler, torch.optim.lr_scheduler.CosineAnnealingLR)
+    for _ in range(config.epochs):
+        trainer.scheduler.step()
+    assert trainer.optimizer.param_groups[0]["lr"] == pytest.approx(config.lr_scheduler_min_lr, abs=1e-6)
+
+
 @pytest.fixture
 def loaders():
     specs, labels = torch.randn(8, 12, 20), torch.tensor([0, 1] * 4)
