@@ -23,7 +23,7 @@ from sklearn.model_selection import train_test_split
 DATASET_NAME = "DCLDE_2027"
 MLFLOW_EXPERIMENT_NAME = f"Datasets/{DATASET_NAME}"
 BACKGROUND_LABEL = "Background"
-DEFAULT_ANNOTATIONS_PATH = Path("/home/noah/HALLO_encoder_collection/data_raw/DCLDE_2027/20260827_090049/annotations.csv")
+DEFAULT_ANNOTATIONS_PATH = Path("/home/noah/HALLO_encoder_collection/data_raw/DCLDE_2027/20260921_075108/annotations.csv")
 
 
 def filter_annotations(df: pd.DataFrame) -> pd.DataFrame:

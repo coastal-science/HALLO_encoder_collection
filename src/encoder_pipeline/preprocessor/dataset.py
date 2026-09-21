@@ -86,15 +86,13 @@ class Dataset:
         # exit early if already materialized
         if self.is_materialized and not force_rebuild:
             return
-        # create raw tmp ds to allow for failure cases
         tmp_path = f"{self.out_file}.tmp"
-        raw_path = f"{self.out_file}.raw.tmp"
         Path(self.out_file).parent.mkdir(parents=True, exist_ok=True)
         df = self._load_annotations().reset_index(drop=True)
         grouped = df.groupby(self.dataset_config.local_file_col)
         metadata_columns = self.dataset_config.metadata_columns or list(df.columns)
         metadata: dict[str, list] = {col: [None] * len(df) for col in metadata_columns}
-        with h5py.File(tmp_path, "w") as h5, h5py.File(raw_path, "w") as h5raw, \
+        with h5py.File(tmp_path, "w") as h5, \
                 ProcessPoolExecutor(max_workers=self.dataset_config.resolve_max_workers()) as pool:
             n_rows_by_future = {
                 pool.submit(
@@ -115,7 +113,10 @@ class Dataset:
                     for result in results:
                         # create hdf5 dataset to fill in with the rest of the spectrogram data
                         if specs_raw is None:
-                            specs_raw = h5raw.create_dataset("spec_raw", shape=(len(df), *result["spec"].shape), dtype=result["spec"].dtype)
+                            specs_raw = h5.create_dataset(
+                                "spec_raw", shape=(len(df), *result["spec"].shape), dtype=result["spec"].dtype,
+                                chunks=(1, *result["spec"].shape),
+                            )
                         # insert row in correct index (as_completed(futures) may not be in same order as df)
                         row_index = result["_row_index"]
                         specs_raw[row_index] = result["spec"]
@@ -128,14 +129,16 @@ class Dataset:
             if specs_raw is None:
                 raise ValueError("every row's Annotation failed -- nothing to write, see preceding skip logs")
 
-            # drop rows whose Annotation failed
+            # drop rows whose Annotation failed by compacting in place, then rename to the final dataset name
             valid_indices = sorted(valid_indices)
             n_skipped = len(df) - len(valid_indices)
             if n_skipped:
                 logger.warning("dropping {} of {} rows from the dataset (see preceding skip logs)", n_skipped, len(df))
-            specs = h5.create_dataset("spec", shape=(len(valid_indices), *specs_raw.shape[1:]), dtype=specs_raw.dtype)
-            for new_pos, old_pos in tqdm(list(enumerate(valid_indices)), desc="writing hdf5", unit="row"):
-                specs[new_pos] = specs_raw[old_pos]
+                for new_pos, old_pos in tqdm(list(enumerate(valid_indices)), desc="compacting hdf5", unit="row"):
+                    if new_pos != old_pos:
+                        specs_raw[new_pos] = specs_raw[old_pos]
+                specs_raw.resize(len(valid_indices), axis=0)
+            h5.move("spec_raw", "spec")
             for col, values in metadata.items():
                 metadata[col] = [values[i] for i in valid_indices]
             # finnally add in all other metadata cols
@@ -144,6 +147,5 @@ class Dataset:
                     h5.create_dataset(col, data=values)
                 else:
                     h5.create_dataset(col, data=[str(v) for v in values], dtype=h5py.string_dtype())
-        Path(raw_path).unlink(missing_ok=True)
         Path(tmp_path).rename(self.out_file)
         self.is_materialized = True
