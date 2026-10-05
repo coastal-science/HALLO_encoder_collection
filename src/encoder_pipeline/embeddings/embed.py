@@ -52,7 +52,9 @@ class PerchEmbeddingModel(EmbeddingModel):
     sample rate / window and runs the model's own batched embedder. extract()
     takes a clip-metadata frame, not a spectrogram DataLoader."""
 
-    def __init__(self, preset: str = "perch_v2", batch_size: int = 64, load_workers: int = 8) -> None:
+    def __init__(
+        self, preset: str = "perch_v2", batch_size: int = 64, load_workers: int = 8, chunk_size: int = 4096
+    ) -> None:
         try:
             from perch_hoplite.zoo import model_configs
         except ImportError as e:
@@ -66,6 +68,7 @@ class PerchEmbeddingModel(EmbeddingModel):
         self.embedding_dim = int(preset_info.embedding_dim)
         self.batch_size = batch_size
         self.load_workers = load_workers
+        self.chunk_size = chunk_size
 
     def _load_clip(self, path: str, begin_sec: float, duration: float) -> np.ndarray:
         """A window_s-long mono clip at self.sample_rate, centered on the
@@ -83,26 +86,34 @@ class PerchEmbeddingModel(EmbeddingModel):
 
     def extract(self, clips: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
         """clips: rows with 'LocalPath', 'FileBeginSec', 'Duration', 'label'.
-        Returns (embeddings, labels) for the clips that loaded, in row order."""
-        rows = list(clips.itertuples(index=False))
+        Returns (embeddings, labels) for the clips that loaded, in row order.
+        Repeated clips (e.g. from oversampling) are loaded and embedded once.
+        Audio is loaded and embedded chunk_size unique clips at a time."""
+        codes, uniques = pd.factorize(pd.MultiIndex.from_frame(clips[["LocalPath", "FileBeginSec", "Duration"]]))
+        embeddings = np.empty((len(uniques), self.embedding_dim), dtype=np.float32)
+        ok = np.zeros(len(uniques), dtype=bool)
         with ThreadPoolExecutor(max_workers=self.load_workers) as pool:
-            loaded = list(pool.map(
-                lambda r: self._safe_load(r.LocalPath, r.FileBeginSec, r.Duration), rows,
-            ))
-        waveforms = [w for w in loaded if w is not None]
-        labels = [r.label for r, w in zip(rows, loaded) if w is not None]
-        n_failed = len(rows) - len(waveforms)
+            for start in range(0, len(uniques), self.chunk_size):
+                stop = min(start + self.chunk_size, len(uniques))
+                loaded = list(pool.map(lambda key: self._safe_load(*key), uniques[start:stop]))
+                chunk_ok = np.array([w is not None for w in loaded])
+                ok[start:stop] = chunk_ok
+                if chunk_ok.any():
+                    embeddings[start:stop][chunk_ok] = self._embed([w for w in loaded if w is not None])
+                logger.info("perch: embedded {}/{} unique clips", stop, len(uniques))
+        keep = ok[codes]
+        n_failed = int((~keep).sum())
         if n_failed:
-            logger.warning("perch: dropped {} of {} clips that failed to load", n_failed, len(rows))
-        if not waveforms:
-            return np.empty((0, self.embedding_dim), dtype=np.float32), np.empty(0, dtype=np.int64)
+            logger.warning("perch: dropped {} of {} clips that failed to load", n_failed, len(clips))
+        return embeddings[codes[keep]], clips["label"].to_numpy()[keep].astype(np.int64)
 
+    def _embed(self, waveforms: list[np.ndarray]) -> np.ndarray:
+        """Mean-pooled embeddings for equal-length waveforms, batch_size at a time."""
         embeddings = []
         for start in range(0, len(waveforms), self.batch_size):
-            batch = np.stack(waveforms[start:start + self.batch_size])
-            out = self.model.batch_embed(batch)
+            out = self.model.batch_embed(np.stack(waveforms[start:start + self.batch_size]))
             embeddings.append(np.asarray(out.pooled_embeddings("mean", "mean")))
-        return np.concatenate(embeddings), np.asarray(labels, dtype=np.int64)
+        return np.concatenate(embeddings)
 
     def _safe_load(self, path: str, begin_sec: float, duration: float):
         try:

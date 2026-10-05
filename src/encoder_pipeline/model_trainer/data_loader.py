@@ -19,7 +19,7 @@ class SpectrogramDataset(Dataset):
         self._h5: Optional[h5py.File] = None
 
         with h5py.File(hdf5_path, "r") as h5:
-            self.length = h5["spec"].shape[0]
+            self.length = len(h5[label_col])
             labels = h5[label_col].asstr()[:]
         if class_label_map is not None:
             labels = [class_label_map.get(label, label) for label in labels]
@@ -45,7 +45,7 @@ def compute_splits(hdf5_path: str, config: DataLoaderConfig) -> list[dict[str, n
     Helper function to compute the train / test / val splits, and do k-fold splitting
     """
     with h5py.File(hdf5_path, "r") as h5:
-        n = h5["spec"].shape[0]
+        n = len(h5["Labels"])
         groups = h5[config.col_to_group_by].asstr()[:] if config.col_to_group_by else np.arange(n)
     unique_groups = np.unique(groups)
 
@@ -109,7 +109,7 @@ def holdout_val_from_train(
         return splits
 
     with h5py.File(hdf5_path, "r") as h5:
-        n = h5["spec"].shape[0]
+        n = len(h5["Labels"])
         groups = h5[config.col_to_group_by].asstr()[:] if config.col_to_group_by else np.arange(n)
 
     out = []

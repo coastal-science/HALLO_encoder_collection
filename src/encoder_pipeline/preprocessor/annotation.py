@@ -25,21 +25,28 @@ class Annotation:
         self.file = file
         self.label = label
         self.time_offset = config.time_offset
-        if 2 * config.time_offset < duration:
+        self.duration: float = 2 * config.time_offset
+        file_duration = len(file.audio) / file.sr
+        Annotation.check_window(duration, file_duration, config)
+        center = time_start + duration / 2
+        self.time_start: float = max(0.0, min(center - config.time_offset, file_duration - self.duration))
+
+    @staticmethod
+    def check_window(duration: float, file_duration: float, config: AnnotationConfig) -> None:
+        """Raises ValueError if the 2 * time_offset window would crop into the
+        call or is longer than the file."""
+        window = 2 * config.time_offset
+        if window < duration:
             raise ValueError(
-                f"time_offset={config.time_offset} gives a padded window of {2 * config.time_offset}s, "
+                f"time_offset={config.time_offset} gives a padded window of {window}s, "
                 f"which is smaller than the annotation's own duration={duration}s "
                 "and would crop into the call."
             )
-        self.duration: float = 2 * config.time_offset
-        file_duration = len(file.audio) / file.sr
-        if self.duration > file_duration:
+        if window > file_duration:
             raise ValueError(
-                f"time_offset={config.time_offset} gives a padded window of {self.duration}s, "
+                f"time_offset={config.time_offset} gives a padded window of {window}s, "
                 f"longer than the file itself ({file_duration}s)."
             )
-        center = time_start + duration / 2
-        self.time_start: float = max(0.0, min(center - config.time_offset, file_duration - self.duration))
 
     @property
     def audio(self) -> np.ndarray:

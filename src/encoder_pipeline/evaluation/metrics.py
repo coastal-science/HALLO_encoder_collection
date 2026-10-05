@@ -22,17 +22,21 @@ def classification_metrics(y_true: np.ndarray, y_pred: np.ndarray, y_score: np.n
 def per_class_metrics(
     y_true: np.ndarray, y_pred: np.ndarray, y_score: np.ndarray, class_names: list[str],
 ) -> dict[str, float]:
-    """Per-class F1 and PR-AUC, keyed 'f1_<class>' / 'pr_auc_<class>'. Args as
-    classification_metrics; class_names indexes y_score's columns. Classes with
-    no positives in y_true score 0."""
+    """Per-class precision, recall, F1 and PR-AUC, keyed '<metric>_<class>'
+    (precision/recall/f1/pr_auc). Args as classification_metrics; class_names
+    indexes y_score's columns. Classes with no positives in y_true score 0."""
     classes = np.arange(y_score.shape[1])
     y_true_bin = label_binarize(y_true, classes=classes)
     if y_true_bin.shape[1] == 1:
         y_true_bin = np.hstack([1 - y_true_bin, y_true_bin])
-    f1 = f1_score(y_true, y_pred, labels=classes, average=None, zero_division=0)
-    pr_auc = average_precision_score(y_true_bin, y_score, average=None)
+    per_metric = {
+        "precision": precision_score(y_true, y_pred, labels=classes, average=None, zero_division=0),
+        "recall": recall_score(y_true, y_pred, labels=classes, average=None, zero_division=0),
+        "f1": f1_score(y_true, y_pred, labels=classes, average=None, zero_division=0),
+        "pr_auc": average_precision_score(y_true_bin, y_score, average=None),
+    }
     return {
-        f"{metric}_{name}": float(value)
-        for name, f1_c, pr_auc_c in zip(class_names, f1, pr_auc)
-        for metric, value in (("f1", f1_c), ("pr_auc", pr_auc_c))
+        f"{metric}_{name}": float(values[i])
+        for i, name in enumerate(class_names)
+        for metric, values in per_metric.items()
     }

@@ -11,6 +11,8 @@ class PerchConfig(StrictBaseModel):
     """perch_hoplite preset name, e.g. 'perch_v2', 'perch_8', 'surfperch'."""
     batch_size: int = 64
     load_workers: int = 8
+    chunk_size: int = 4096
+    """Unique clips loaded and embedded per chunk; bounds peak raw-audio memory."""
 
 
 class EmbeddingsConfig(StrictBaseModel):
@@ -25,15 +27,9 @@ class EmbeddingsConfig(StrictBaseModel):
     mlflow_id: Optional[str] = None
     """run_id to embed. null = the run this pipeline invocation's own
     model_trainer stage just produced -- see pipeline.run_pipeline."""
-    reuse_embeddings: bool = False
-    """Skip the encoder forward pass and load each fold's embeddings from a
-    prior run's data_dir/embeddings/<run_id>/fold<n>.h5, so only the linear
-    probe reruns. Errors if no fold file is found. The preprocessor dataset and
-    checkpoints are not read, so reuse_classes must be given."""
-    reuse_classes: Optional[list[str]] = None
-    """Class list in saved-label index order, required with reuse_embeddings
-    (no dataloaders are built to supply it). Normally sorted(set(...)) of the
-    training labels after model_trainer.dataloader.class_label_map."""
+    reuse_embeddings_path: Optional[str] = None
+    """A prior run's data_dir/embeddings/<run_id>/fold<n>.h5. Skips every other
+    stage and only reruns the linear probe on it, as a new nested run under <run_id>."""
     linear_probe_epochs: int = 1000
     linear_probe_lr: float = 3e-4
     linear_probe_label_map: Optional[dict[str, str]] = None

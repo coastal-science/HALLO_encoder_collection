@@ -4,6 +4,7 @@ from typing import Optional, Union
 
 import h5py
 import pandas as pd
+import soundfile as sf
 from loguru import logger
 from threadpoolctl import threadpool_limits
 from tqdm import tqdm
@@ -19,22 +20,27 @@ class Dataset:
 
     def __init__(
         self, spec_config: SpectrogramConfig, audio_file_config: AudioFileConfig, annotation_config: AnnotationConfig,
-        dataset_config: DatasetConfig, data_dir: str, run_name: Optional[str] = None,
+        dataset_config: DatasetConfig, data_dir: str, run_name: Optional[str] = None, metadata_only: bool = False,
     ) -> None:
         self.spec_config = spec_config
         self.audio_file_config = audio_file_config
         self.annotation_config = annotation_config
         self.dataset_config = dataset_config
         self.run_name = run_name
+        self.metadata_only = metadata_only
+        hash_params = {
+            "spectrogram": self.spec_config.model_dump(),
+            "audio_file": self.audio_file_config.model_dump(),
+            "annotation": self.annotation_config.model_dump(),
+            "annotations_csv": self.dataset_config.annotations_csv,
+            "classes_to_drop": self.dataset_config.classes_to_drop,
+            "run_name": self.run_name,
+        }
+        if metadata_only:
+            # spectrogram / resampling don't touch a metadata-only file
+            hash_params = {**hash_params, "spectrogram": None, "audio_file": None, "metadata_only": True}
         # store resultant hdf5 file with has of config parameters as its file name
-        self.out_file, self.content_hash = get_or_create_hashed_file(f"{data_dir}/preprocessor", ".h5", {
-                    "spectrogram": self.spec_config.model_dump(),
-                    "audio_file": self.audio_file_config.model_dump(),
-                    "annotation": self.annotation_config.model_dump(),
-                    "annotations_csv": self.dataset_config.annotations_csv,
-                    "classes_to_drop": self.dataset_config.classes_to_drop,
-                    "run_name": self.run_name,
-        })
+        self.out_file, self.content_hash = get_or_create_hashed_file(f"{data_dir}/preprocessor", ".h5", hash_params)
         # checks if file exists locally - TODO: check mlflow as well
         self.is_materialized = Path(self.out_file).exists()
 
@@ -82,9 +88,70 @@ class Dataset:
                 results.append({**row, "spec": spec.apply_dynamic(annotation, raw)})
             return results
 
+    @staticmethod
+    def _filter_file(file_path: str, rows: list[dict], annotation_config: AnnotationConfig) -> list[int]:
+        """_row_index of each row whose Annotation window would be valid, from
+        the file's header length alone -- no audio decoded."""
+        try:
+            info = sf.info(file_path)
+        except Exception as e:  # soundfile raises a range of errors on bad files
+            logger.error("skipping {} rows in {}: {}", len(rows), file_path, e)
+            return []
+        file_duration = info.frames / info.samplerate
+        valid = []
+        for row in rows:
+            try:
+                Annotation.check_window(row["Duration"], file_duration, annotation_config)
+            except ValueError as e:
+                logger.error("skipping row {} in {}: {}", row["uid"], file_path, e)
+                continue
+            valid.append(row["_row_index"])
+        return valid
+
+    def _build_metadata_hdf5(self, tmp_path: str) -> None:
+        """Metadata columns only (no 'spec'), for embedders that do their own
+        audio preprocessing; rows filtered the same way as the spectrogram build."""
+        df = self._load_annotations().reset_index(drop=True)
+        metadata_columns = self.dataset_config.metadata_columns or list(df.columns)
+        valid_indices: list[int] = []
+        with ProcessPoolExecutor(max_workers=self.dataset_config.resolve_max_workers()) as pool:
+            futures = [
+                pool.submit(
+                    Dataset._filter_file, file_path,
+                    [
+                        {"_row_index": idx, "uid": uid, "Duration": duration}
+                        for idx, uid, duration in zip(rows.index, rows[self.dataset_config.uid_col], rows["Duration"])
+                    ],
+                    self.annotation_config,
+                )
+                for file_path, rows in df.groupby(self.dataset_config.local_file_col)
+            ]
+            for future in tqdm(as_completed(futures), total=len(futures), desc="checking annotation windows", unit="file"):
+                valid_indices.extend(future.result())
+        if not valid_indices:
+            raise ValueError("every row's Annotation failed -- nothing to write, see preceding skip logs")
+        valid_indices.sort()
+        n_skipped = len(df) - len(valid_indices)
+        if n_skipped:
+            logger.warning("dropping {} of {} rows from the dataset (see preceding skip logs)", n_skipped, len(df))
+        kept = df.iloc[valid_indices]
+        with h5py.File(tmp_path, "w") as h5:
+            for col in metadata_columns:
+                if pd.api.types.is_numeric_dtype(df[col]):
+                    h5.create_dataset(col, data=kept[col].to_numpy())
+                else:
+                    h5.create_dataset(col, data=[str(v) for v in kept[col]], dtype=h5py.string_dtype())
+
     def build_hdf5(self, force_rebuild: bool = False) -> Union[str, None]:
         # exit early if already materialized
         if self.is_materialized and not force_rebuild:
+            return
+        if self.metadata_only:
+            tmp_path = f"{self.out_file}.tmp"
+            Path(self.out_file).parent.mkdir(parents=True, exist_ok=True)
+            self._build_metadata_hdf5(tmp_path)
+            Path(tmp_path).rename(self.out_file)
+            self.is_materialized = True
             return
         tmp_path = f"{self.out_file}.tmp"
         Path(self.out_file).parent.mkdir(parents=True, exist_ok=True)
