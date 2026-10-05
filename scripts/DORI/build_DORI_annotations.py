@@ -18,7 +18,7 @@ VERIFY_HF = False
 DATASET_NAME = "DORI"
 DORI_ROOT = Path("/data/DORI")
 DATA_DIR = REPO_ROOT / "data_raw" / DATASET_NAME
-MLFLOW_TRACKING_URI = "http://127.0.0.1:5001/"
+MLFLOW_TRACKING_URI = "http://localhost:5000"
 MLFLOW_EXPERIMENT_NAME = f"Datasets/{DATASET_NAME}"
 # How to select 'Background' windows; only 'naive' is implemented so far.
 BACKGROUND_METHOD = "naive"
