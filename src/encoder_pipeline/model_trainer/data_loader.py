@@ -47,32 +47,45 @@ def compute_splits(hdf5_path: str, config: DataLoaderConfig) -> list[dict[str, n
     with h5py.File(hdf5_path, "r") as h5:
         n = len(h5["Labels"])
         groups = h5[config.col_to_group_by].asstr()[:] if config.col_to_group_by else np.arange(n)
-    unique_groups = np.unique(groups)
+        is_holdout = np.zeros(n, dtype=bool)
+        if config.test_holdout_col:
+            holdout_values = h5[config.test_holdout_col].asstr()[:]
+            missing = sorted(set(config.test_holdout_values) - set(holdout_values))
+            if missing:
+                raise ValueError(f"test_holdout_values {missing} not found in column {config.test_holdout_col}")
+            is_holdout = np.isin(holdout_values, config.test_holdout_values)
+    holdout_idx = np.where(is_holdout)[0]
+    # holdout rows never reach train / val, even when their group straddles the holdout
+    unique_groups = np.unique(groups[~is_holdout])
 
     def row_idx(group_subset: np.ndarray) -> np.ndarray:
-        return np.where(np.isin(groups, group_subset))[0]
+        return np.where(np.isin(groups, group_subset) & ~is_holdout)[0]
 
     if config.n_folds > 1:
         kfold = KFold(n_splits=config.n_folds, shuffle=True, random_state=config.split_seed)
+        test = {"test": holdout_idx} if config.test_holdout_col else {}
         return [
-            {"train": row_idx(unique_groups[train_pos]), "val": row_idx(unique_groups[val_pos])}
+            {"train": row_idx(unique_groups[train_pos]), "val": row_idx(unique_groups[val_pos]), **test}
             for train_pos, val_pos in kfold.split(unique_groups)
         ]
 
-    remaining_groups, test_groups = unique_groups, np.array([])
-    if config.test_size > 0:
-        remaining_groups, test_groups = train_test_split(
-            remaining_groups, test_size=config.test_size, random_state=config.split_seed,
-        )
+    if config.test_holdout_col:
+        remaining_groups, test_idx, val_frac = unique_groups, holdout_idx, config.val_size
+    else:
+        remaining_groups, test_groups = unique_groups, np.array([])
+        if config.test_size > 0:
+            remaining_groups, test_groups = train_test_split(
+                remaining_groups, test_size=config.test_size, random_state=config.split_seed,
+            )
+        test_idx, val_frac = row_idx(test_groups), config.val_size / (1 - config.test_size)
 
     train_groups, val_groups = remaining_groups, np.array([])
     if config.val_size > 0:
-        val_frac = config.val_size / (1 - config.test_size)
         train_groups, val_groups = train_test_split(
             remaining_groups, test_size=val_frac, random_state=config.split_seed,
         )
 
-    return [{"train": row_idx(train_groups), "val": row_idx(val_groups), "test": row_idx(test_groups)}]
+    return [{"train": row_idx(train_groups), "val": row_idx(val_groups), "test": test_idx}]
 
 
 def load_saved_splits(hdf5_path: str, splits_path: str, uid_col: str = "uid") -> list[dict[str, np.ndarray]]:

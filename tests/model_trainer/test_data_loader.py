@@ -18,6 +18,7 @@ def hdf5_path(tmp_path):
     groups = ["a", "a", "b", "b", "c", "c", "d", "d"]
     with h5py.File(path, "w") as h5:
         h5.create_dataset("spec", data=np.zeros((len(groups), 4)))
+        h5.create_dataset("Labels", data=np.zeros(len(groups), dtype=int))
         h5.create_dataset("file_id", data=groups, dtype=h5py.string_dtype())
     return str(path)
 
@@ -55,6 +56,62 @@ def test_train_test_split_is_reproducible_with_same_seed(hdf5_path):
 
     for key in ("train", "val", "test"):
         assert list(split_a[key]) == list(split_b[key])
+
+
+@pytest.fixture
+def holdout_hdf5_path(tmp_path):
+    """20 rows across 10 files (2 rows each) and 3 sites: 6 files in site
+    x, 2 each in y and z."""
+    path = tmp_path / "holdout_dataset.h5"
+    files = [f"f{i}" for i in range(10) for _ in range(2)]
+    sites = ["x"] * 12 + ["y"] * 4 + ["z"] * 4
+    with h5py.File(path, "w") as h5:
+        h5.create_dataset("Labels", data=np.zeros(len(files), dtype=int))
+        h5.create_dataset("file_id", data=files, dtype=h5py.string_dtype())
+        h5.create_dataset("site", data=sites, dtype=h5py.string_dtype())
+    return str(path)
+
+
+def test_holdout_puts_exactly_the_named_values_in_test(holdout_hdf5_path):
+    config = DataLoaderConfig(
+        val_size=0.5, split_seed=0, col_to_group_by="file_id",
+        test_holdout_col="site", test_holdout_values=["y", "z"],
+    )
+    [split] = compute_splits(holdout_hdf5_path, config)
+    sites = _groups(holdout_hdf5_path, "site")
+    files = _groups(holdout_hdf5_path, "file_id")
+
+    assert list(split["test"]) == list(np.where(np.isin(sites, ["y", "z"]))[0])
+    assert set(sites[split["train"]]) == set(sites[split["val"]]) == {"x"}
+    # val_size is a fraction of the remaining (non-test) groups: 3 of site x's 6 files
+    assert len(set(files[split["val"]])) == 3
+    assert not set(files[split["train"]]) & set(files[split["val"]])
+    assert sorted(np.concatenate([split["train"], split["val"], split["test"]])) == list(range(20))
+
+
+def test_holdout_with_kfold_keeps_the_same_test_set_in_every_fold(holdout_hdf5_path):
+    config = DataLoaderConfig(
+        n_folds=3, split_seed=0, col_to_group_by="file_id",
+        test_holdout_col="site", test_holdout_values=["z"],
+    )
+    folds = compute_splits(holdout_hdf5_path, config)
+    sites = _groups(holdout_hdf5_path, "site")
+
+    for fold in folds:
+        assert set(sites[fold["test"]]) == {"z"}
+        assert "z" not in set(sites[fold["train"]]) | set(sites[fold["val"]])
+        assert sorted(np.concatenate([fold["train"], fold["val"], fold["test"]])) == list(range(20))
+
+
+def test_holdout_raises_on_a_value_the_column_lacks(holdout_hdf5_path):
+    config = DataLoaderConfig(test_holdout_col="site", test_holdout_values=["y", "typo"])
+    with pytest.raises(ValueError, match="typo"):
+        compute_splits(holdout_hdf5_path, config)
+
+
+def test_holdout_col_and_values_must_be_set_together():
+    with pytest.raises(ValueError, match="set together"):
+        DataLoaderConfig(test_holdout_col="site")
 
 
 def test_kfold_puts_every_group_in_val_exactly_once(hdf5_path):

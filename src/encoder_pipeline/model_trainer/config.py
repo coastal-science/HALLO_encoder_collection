@@ -19,6 +19,13 @@ class DataLoaderConfig(StrictBaseModel):
     col_to_group_by: Optional[str] = None
     """Metadata column to split on, e.g. 'LocalPath' (file-level) or a
     deployment id column"""
+    test_holdout_col: Optional[str] = None
+    """Metadata column whose test_holdout_values pick the test split, e.g.
+    'Dataset' to hold whole datasets out. Set together with
+    test_holdout_values; test_size is then ignored and val_size is the
+    fraction of the remaining (non-test) groups held out as val."""
+    test_holdout_values: Optional[list[str]] = None
+    """Values of test_holdout_col whose rows all go to test."""
     class_label_map: Optional[dict[str, str]] = None
     """Maps raw Labels values to collapsed labels before SpectrogramDataset
     builds its class list, e.g. {"SRKW": "KW", "TKW": "KW"}. Unmapped labels
