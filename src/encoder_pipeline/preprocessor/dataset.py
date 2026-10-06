@@ -74,7 +74,11 @@ class Dataset:
         annotation_config: AnnotationConfig,
     ) -> list[dict]:
         with threadpool_limits(limits=1):
-            audio_file = AudioFile(file_path, audio_file_config.resample_sr)
+            try:
+                audio_file = AudioFile(file_path, audio_file_config.resample_sr)
+            except Exception as e:  # soundfile/audioread raise a range of errors on bad files
+                logger.error("skipping {} rows in {}: {!r}", len(rows), file_path, e)
+                return []
             spec = Spectrogram(spec_config)
             results = []
             for row in rows:

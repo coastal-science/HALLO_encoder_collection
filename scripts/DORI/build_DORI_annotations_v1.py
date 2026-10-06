@@ -209,7 +209,7 @@ if __name__ == "__main__":
     print(f"nrows before removing clicks and pseudo labels {len(DORI_LOCAL)}")
     DORI_LOCAL = DORI_LOCAL[DORI_LOCAL['call_annotation_clean'] != 'clicks'][DORI_LOCAL['ecotype_label_source'] == 'DORI (human-generated)']
     print(f"nrows after removing clicks and pseudo labels {len(DORI_LOCAL)}")
-
+    import pdb;pdb.set_trace()
     def select_naive_background_windows(annotations: pd.DataFrame, window_duration: float, hop_duration: float, event_buffer: float) -> pd.DataFrame:
         """The "naive" background_method: slides a window across every annotated
         recording, keeping only starts that don't overlap a labeled event
