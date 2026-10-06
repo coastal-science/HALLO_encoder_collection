@@ -207,6 +207,7 @@ if __name__ == "__main__":
     print(DORI_LOCAL[~DORI_LOCAL['provider'].isin(["ONC VENUS (Strait of Georgia)", "ONC VENUS (Saanich)"])][DORI_LOCAL['call_annotation_clean'] != 'clicks'][DORI_LOCAL['species_label_source'] == 'DORI (human-generated)']['ecotype_label_clean'].value_counts())
     # remove clicks and pseudo labels
     print(f"nrows before removing clicks and pseudo labels {len(DORI_LOCAL)}")
+    import pdb;pdb.set_trace()
     DORI_LOCAL = DORI_LOCAL[DORI_LOCAL['call_annotation_clean'] != 'clicks'][DORI_LOCAL['ecotype_label_source'] == 'DORI (human-generated)']
     print(f"nrows after removing clicks and pseudo labels {len(DORI_LOCAL)}")
     import pdb;pdb.set_trace()
