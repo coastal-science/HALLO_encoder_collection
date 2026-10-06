@@ -1,9 +1,13 @@
+import h5py
 import mlflow
+import numpy as np
+import pandas as pd
 import pytest
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, Subset
 
 from encoder_pipeline.model_trainer.config import ClassifierConfig
+from encoder_pipeline.model_trainer.data_loader import SpectrogramDataset
 from encoder_pipeline.model_trainer.train import ClassifierTrainer, build_optimizer
 
 
@@ -48,12 +52,18 @@ def test_classifier_trainer_scheduler_cosine_anneals_lr_to_min():
 
 
 @pytest.fixture
-def loaders():
-    specs, labels = torch.randn(8, 12, 20), torch.tensor([0, 1] * 4)
+def loaders(tmp_path):
+    """8 train rows, then 4 val and 4 test rows, over one small hdf5."""
+    path = tmp_path / "dataset.h5"
+    with h5py.File(path, "w") as h5:
+        h5.create_dataset("spec", data=np.random.randn(16, 12, 20).astype(np.float32))
+        h5.create_dataset("Labels", data=["a", "b"] * 8, dtype=h5py.string_dtype())
+        h5.create_dataset("uid", data=np.arange(100, 116))
+    dataset = SpectrogramDataset(str(path))
     return {
-        "train": DataLoader(TensorDataset(specs, labels), batch_size=4),
-        "val": DataLoader(TensorDataset(specs, labels), batch_size=4),
-        "test": DataLoader(TensorDataset(specs, labels), batch_size=4),
+        "train": DataLoader(Subset(dataset, np.arange(8)), batch_size=4),
+        "val": DataLoader(Subset(dataset, np.arange(8, 12)), batch_size=4, shuffle=True),
+        "test": DataLoader(Subset(dataset, np.arange(12, 16)), batch_size=4, shuffle=True),
     }
 
 
@@ -69,3 +79,24 @@ def test_fit_calls_on_epoch_end_once_per_epoch_and_returns_final_metrics(tmp_pat
     assert "val_loss" in seen[0][1]
     assert {"best_val_loss", "val_f1", "test_f1"} <= results.keys()  # eval metrics merged into the return
     assert seen[-1][1] == results  # the final call carries the full metric dict
+
+
+def test_fit_logs_the_best_epoch_and_a_per_sample_predictions_csv(tmp_path, loaders):
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+    trainer = ClassifierTrainer(ClassifierConfig(device="cpu", epochs=3), num_classes=2)
+
+    with mlflow.start_run() as run:
+        trainer.fit(loaders, fold=0, data_dir=str(tmp_path))
+
+    client = mlflow.MlflowClient()
+    val_losses = [m.value for m in client.get_metric_history(run.info.run_id, "fold0_val_loss")]
+    assert client.get_run(run.info.run_id).data.metrics["fold0_best_epoch"] == int(np.argmin(val_losses))
+    assert "fold0_predictions.csv" in [a.path for a in client.list_artifacts(run.info.run_id)]
+
+    predictions = pd.read_csv(tmp_path / "model_trainer" / run.info.run_id / "fold0_predictions.csv")
+    assert sorted(predictions.loc[predictions["split"] == "val", "uid"]) == [108, 109, 110, 111]
+    assert sorted(predictions.loc[predictions["split"] == "test", "uid"]) == [112, 113, 114, 115]
+    # uid % 2 picks the row's label, so a uid paired with another row's prediction would show up here
+    assert list(predictions["true_label"]) == ["a" if uid % 2 == 0 else "b" for uid in predictions["uid"]]
+    assert list(predictions["correct"]) == list(predictions["true_label"] == predictions["pred_label"])
+    np.testing.assert_allclose(predictions[["prob_a", "prob_b"]].sum(axis=1), 1.0, rtol=1e-5)

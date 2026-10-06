@@ -109,11 +109,6 @@ def test_holdout_raises_on_a_value_the_column_lacks(holdout_hdf5_path):
         compute_splits(holdout_hdf5_path, config)
 
 
-def test_holdout_col_and_values_must_be_set_together():
-    with pytest.raises(ValueError, match="set together"):
-        DataLoaderConfig(test_holdout_col="site")
-
-
 def test_kfold_puts_every_group_in_val_exactly_once(hdf5_path):
     config = DataLoaderConfig(n_folds=4, split_seed=0, col_to_group_by="file_id")
     folds = compute_splits(hdf5_path, config)

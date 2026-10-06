@@ -84,9 +84,10 @@ class PerchEmbeddingModel(EmbeddingModel):
         n = int(self.window_s * self.sample_rate)
         return np.pad(y, (0, max(0, n - len(y))))[:n]
 
-    def extract(self, clips: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    def extract(self, clips: pd.DataFrame) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """clips: rows with 'LocalPath', 'FileBeginSec', 'Duration', 'label'.
-        Returns (embeddings, labels) for the clips that loaded, in row order.
+        Returns (embeddings, labels) for the clips that loaded, in row order,
+        plus the boolean mask over clips' rows of which ones those are.
         Repeated clips (e.g. from oversampling) are loaded and embedded once.
         Audio is loaded and embedded chunk_size unique clips at a time."""
         codes, uniques = pd.factorize(pd.MultiIndex.from_frame(clips[["LocalPath", "FileBeginSec", "Duration"]]))
@@ -105,7 +106,7 @@ class PerchEmbeddingModel(EmbeddingModel):
         n_failed = int((~keep).sum())
         if n_failed:
             logger.warning("perch: dropped {} of {} clips that failed to load", n_failed, len(clips))
-        return embeddings[codes[keep]], clips["label"].to_numpy()[keep].astype(np.int64)
+        return embeddings[codes[keep]], clips["label"].to_numpy()[keep].astype(np.int64), keep
 
     def _embed(self, waveforms: list[np.ndarray]) -> np.ndarray:
         """Mean-pooled embeddings for equal-length waveforms, batch_size at a time."""

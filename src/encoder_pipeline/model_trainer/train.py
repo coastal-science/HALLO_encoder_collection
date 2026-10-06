@@ -5,6 +5,7 @@ from typing import Callable, Optional
 
 import mlflow
 import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 from lightly.loss import NTXentLoss
@@ -13,9 +14,11 @@ from lightly.utils.scheduler import cosine_schedule
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from encoder_pipeline.evaluation.metrics import classification_metrics
+from encoder_pipeline.evaluation.predictions import predictions_frame
 from encoder_pipeline.model_trainer.config import (
     ClassifierConfig, MoCoConfig, MoCoV3Config, ModelTrainerConfig, SimCLRConfig,
 )
+from encoder_pipeline.model_trainer.data_loader import load_uids, ordered_loader
 from encoder_pipeline.model_trainer.models import ClassifierModel, MoCoModel, MoCoV3Model, SimCLRModel
 from encoder_pipeline.model_trainer.augment import SpectrogramClassifierAugment, SpectrogramSSLAugment
 from encoder_pipeline.preprocessor.config import SpectrogramConfig
@@ -67,6 +70,7 @@ class Trainer(ABC):
         out_dir.mkdir(parents=True, exist_ok=True)
         best_path = out_dir / f"fold{fold}_best.pt"
         best_val_loss = math.inf
+        best_epoch = -1
         last_eval_best_val_loss = math.inf
         epoch_losses: dict[str, float] = {}
         for epoch in tqdm(range(self.epochs)):
@@ -82,6 +86,7 @@ class Trainer(ABC):
                 epoch_losses["val_loss"] = val_loss
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
+                    best_epoch = epoch
                     torch.save({"model": self.model, "spectrogram_config": spectrogram_config}, best_path)
             if (
                 self.eval_every is not None and (epoch + 1) % self.eval_every == 0
@@ -98,12 +103,16 @@ class Trainer(ABC):
         mlflow.log_artifact(str(last_path))
         if "val" in loaders:
             mlflow.log_metric(f"fold{fold}_best_val_loss", best_val_loss)
+            mlflow.log_metric(f"fold{fold}_best_epoch", best_epoch)
             mlflow.log_artifact(str(best_path))
             self.model.load_state_dict(torch.load(best_path, weights_only=False)["model"].state_dict())
 
-        eval_metrics = self._evaluate(loaders)
+        predictions_path = out_dir / f"fold{fold}_predictions.csv"
+        eval_metrics = self._evaluate(loaders, predictions_path)
         for key, value in eval_metrics.items():
             mlflow.log_metric(f"fold{fold}_{key}", value)
+        if predictions_path.exists():
+            mlflow.log_artifact(str(predictions_path))
 
         results = {**epoch_losses, **eval_metrics}
         if "val" in loaders:
@@ -118,10 +127,13 @@ class Trainer(ABC):
         otherwise runs forward-only. Returns the sample-weighted mean
         loss."""
 
-    def _evaluate(self, loaders: dict[str, DataLoader]) -> dict[str, float]:
+    def _evaluate(
+        self, loaders: dict[str, DataLoader], predictions_path: Optional[Path] = None,
+    ) -> dict[str, float]:
         """Runs once, after fit()'s epoch loop, on self.model (the best
         checkpoint if one was saved). Returns test/val metrics keyed by
-        "{split}_{metric_name}"""
+        "{split}_{metric_name}. When predictions_path is given, also writes
+        the per-sample test/val predictions there as a csv."""
         return {}
 
 
@@ -262,12 +274,18 @@ class ClassifierTrainer(Trainer):
             total_loss += loss.item() * specs.size(0)
         return total_loss / len(loader.dataset)
 
-    def _evaluate(self, loaders: dict[str, DataLoader]) -> dict[str, float]:
+    def _evaluate(
+        self, loaders: dict[str, DataLoader], predictions_path: Optional[Path] = None,
+    ) -> dict[str, float]:
         metrics: dict[str, float] = {}
+        frames: list[pd.DataFrame] = []
         self.model.eval()
         for split, loader in loaders.items():
             if split == "train":
                 continue
+            row_idx = None
+            if predictions_path is not None:
+                loader, row_idx = ordered_loader(loader)
             y_true, y_pred, y_score = [], [], []
             with torch.no_grad():
                 for specs, labels in loader:
@@ -279,6 +297,12 @@ class ClassifierTrainer(Trainer):
             y_true_arr, y_pred_arr, y_score_arr = np.concatenate(y_true), np.concatenate(y_pred), np.concatenate(y_score)
             for name, value in classification_metrics(y_true_arr, y_pred_arr, y_score_arr).items():
                 metrics[f"{split}_{name}"] = value
+            if row_idx is not None:
+                dataset = loader.dataset.dataset
+                uids = load_uids(dataset.hdf5_path)[row_idx]
+                frames.append(predictions_frame(split, uids, y_true_arr, y_score_arr, dataset.classes))
+        if frames:
+            pd.concat(frames).to_csv(predictions_path, index=False)
         return metrics
 
 

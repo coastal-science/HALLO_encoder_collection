@@ -88,15 +88,32 @@ def compute_splits(hdf5_path: str, config: DataLoaderConfig) -> list[dict[str, n
     return [{"train": row_idx(train_groups), "val": row_idx(val_groups), "test": test_idx}]
 
 
+def load_uids(hdf5_path: str, uid_col: str = "uid") -> np.ndarray:
+    """The row-level uid of every hdf5 row, in row order."""
+    with h5py.File(hdf5_path, "r") as h5:
+        dset = h5[uid_col]
+        return dset.asstr()[:] if h5py.check_string_dtype(dset.dtype) else dset[:]
+
+
+def ordered_loader(loader: DataLoader) -> tuple[DataLoader, np.ndarray]:
+    """A non-shuffling loader over one epoch of loader's sampler, plus the
+    SpectrogramDataset row index of each sample it yields, so per-sample
+    outputs can be traced back to their rows."""
+    row_idx = np.asarray(loader.dataset.indices)[np.fromiter(loader.sampler, dtype=np.int64)]
+    ordered = DataLoader(
+        Subset(loader.dataset.dataset, row_idx), batch_size=loader.batch_size,
+        num_workers=loader.num_workers, pin_memory=loader.pin_memory,
+    )
+    return ordered, row_idx
+
+
 def load_saved_splits(hdf5_path: str, splits_path: str, uid_col: str = "uid") -> list[dict[str, np.ndarray]]:
     """Loads a previously-saved splits.csv and maps its uid -> fold_N
     assignments onto this hdf5's row indices (by uid value, not row order,
     since a rebuilt hdf5 isn't guaranteed to keep the same row order). A saved
     uid the hdf5 no longer has -- e.g. dropped by dataset.classes_to_drop --
     is skipped."""
-    with h5py.File(hdf5_path, "r") as h5:
-        dset = h5[uid_col]
-        uids = dset.asstr()[:] if h5py.check_string_dtype(dset.dtype) else dset[:]
+    uids = load_uids(hdf5_path, uid_col)
     uid_to_row = {uid: i for i, uid in enumerate(uids)}
 
     saved = pd.read_csv(splits_path)
@@ -145,9 +162,7 @@ def holdout_val_from_train(
 
 
 def save_splits(hdf5_path: str, splits: list[dict[str, np.ndarray]], out_dir: str, uid_col: str = "uid") -> str:
-    with h5py.File(hdf5_path, "r") as h5:
-        dset = h5[uid_col]
-        uids = dset.asstr()[:] if h5py.check_string_dtype(dset.dtype) else dset[:]
+    uids = load_uids(hdf5_path, uid_col)
 
     df = pd.DataFrame({"uid": uids})
     for fold, split in enumerate(splits):
