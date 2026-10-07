@@ -105,7 +105,7 @@ class Dataset:
         valid = []
         for row in rows:
             try:
-                Annotation.check_window(row["Duration"], file_duration, annotation_config)
+                Annotation.check_window(file_duration, annotation_config)
             except ValueError as e:
                 logger.error("skipping row {} in {}: {}", row["uid"], file_path, e)
                 continue

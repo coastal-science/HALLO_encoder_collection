@@ -27,21 +27,15 @@ class Annotation:
         self.time_offset = config.time_offset
         self.duration: float = 2 * config.time_offset
         file_duration = len(file.audio) / file.sr
-        Annotation.check_window(duration, file_duration, config)
+        Annotation.check_window(file_duration, config)
+        # window is centered on the annotation; annotations longer than it are center-cropped
         center = time_start + duration / 2
         self.time_start: float = max(0.0, min(center - config.time_offset, file_duration - self.duration))
 
     @staticmethod
-    def check_window(duration: float, file_duration: float, config: AnnotationConfig) -> None:
-        """Raises ValueError if the 2 * time_offset window would crop into the
-        call or is longer than the file."""
+    def check_window(file_duration: float, config: AnnotationConfig) -> None:
+        """Raises ValueError if the 2 * time_offset window is longer than the file."""
         window = 2 * config.time_offset
-        if window < duration:
-            raise ValueError(
-                f"time_offset={config.time_offset} gives a padded window of {window}s, "
-                f"which is smaller than the annotation's own duration={duration}s "
-                "and would crop into the call."
-            )
         if window > file_duration:
             raise ValueError(
                 f"time_offset={config.time_offset} gives a padded window of {window}s, "
