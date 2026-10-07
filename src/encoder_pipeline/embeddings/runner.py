@@ -129,7 +129,7 @@ def generate_embeddings(
         clip_frames = _perch_clip_frames(dataloaders)
         checkpoint_desc = f"perch_hoplite:{config.perch.preset}"
     else:
-        checkpoint_dir = download_artifact(data_dir, run_id)
+        checkpoint_dir = download_artifact(data_dir, config.checkpoint_mlflow_id or run_id)
 
     with mlflow.start_run(run_id=run_id):
         mlflow.log_params(flatten_params("embeddings", config.model_dump()))
