@@ -112,3 +112,28 @@ def test_fit_logs_the_best_epoch_and_a_per_sample_predictions_csv(tmp_path, load
     assert list(predictions["true_label"]) == ["a" if uid % 2 == 0 else "b" for uid in predictions["uid"]]
     assert list(predictions["correct"]) == list(predictions["true_label"] == predictions["pred_label"])
     np.testing.assert_allclose(predictions[["prob_a", "prob_b"]].sum(axis=1), 1.0, rtol=1e-5)
+
+
+def test_fit_stops_once_val_loss_has_not_improved_for_patience_epochs(tmp_path, loaders, monkeypatch):
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+    trainer = ClassifierTrainer(ClassifierConfig(device="cpu", epochs=10, early_stopping_patience=2), num_classes=2)
+    val_losses = iter([1.0, 0.5, 0.6, 0.7, 0.1])  # best at epoch 1, so epoch 3 is the last one run
+    run_epoch = trainer._run_epoch
+    monkeypatch.setattr(trainer, "_run_epoch", lambda loader, train: run_epoch(loader, train) if train else next(val_losses))
+
+    seen: list[int] = []
+    with mlflow.start_run() as run:
+        results = trainer.fit(loaders, fold=0, data_dir=str(tmp_path), on_epoch_end=lambda e, _m: seen.append(e))
+
+    assert seen == [0, 1, 2, 3]  # one call per epoch run, the stopped one carrying the final metrics
+    assert results["best_val_loss"] == 0.5
+    metrics = mlflow.MlflowClient().get_run(run.info.run_id).data.metrics
+    assert metrics["fold0_best_epoch"] == 1
+    assert metrics["fold0_stopped_epoch"] == 3
+
+
+def test_fit_with_early_stopping_requires_a_val_loader(tmp_path, loaders):
+    mlflow.set_tracking_uri(f"sqlite:///{tmp_path}/mlflow.db")
+    trainer = ClassifierTrainer(ClassifierConfig(device="cpu", epochs=3, early_stopping_patience=1), num_classes=2)
+    with mlflow.start_run(), pytest.raises(AssertionError):
+        trainer.fit({"train": loaders["train"]}, fold=0, data_dir=str(tmp_path))

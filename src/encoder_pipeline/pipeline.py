@@ -34,8 +34,9 @@ def run_pipeline(config: PipelineConfig) -> None:
         rerun_linear_probe(config.embeddings, config.model_trainer.dataloader.class_label_map)
         return
 
-    if config.embeddings.mlflow_id is None and config.embeddings.source == "perch_hoplite":
-        dataset_path = run_preprocessor(config.preprocessor, config.data_dir, metadata_only=True)
+    is_perch = config.embeddings.source == "perch_hoplite"
+    if config.embeddings.mlflow_id is None and (is_perch or config.embeddings.checkpoint_mlflow_id):
+        dataset_path = run_preprocessor(config.preprocessor, config.data_dir, metadata_only=is_perch)
         run_id, dataloaders = open_untrained_run(config, dataset_path)
     elif config.embeddings.mlflow_id is None:
         dataset_path = run_preprocessor(config.preprocessor, config.data_dir)

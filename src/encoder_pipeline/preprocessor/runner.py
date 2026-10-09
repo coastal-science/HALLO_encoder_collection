@@ -8,6 +8,7 @@ from encoder_pipeline.common.config_utils import load_pipeline_config
 from encoder_pipeline.common.mlflow_utils import configure_mlflow, flatten_params
 from encoder_pipeline.preprocessor.config import DatasetConfig, PreprocessorConfig
 from encoder_pipeline.preprocessor.dataset import Dataset
+from encoder_pipeline.preprocessor.samples import save_sample_images
 
 
 def resolve_annotations_csv(dataset_config: DatasetConfig) -> str:
@@ -46,6 +47,12 @@ def run_preprocessor(config: PreprocessorConfig, data_dir: str, metadata_only: b
             with spec_config_path.open("wb") as f:
                 pickle.dump(config.spectrogram, f)
             mlflow.log_artifact(str(spec_config_path))
+            if config.dataset.n_sample_images and not metadata_only:
+                sample_paths = save_sample_images(
+                    dataset.out_file, config, spec_config_path.parent / "sample_spectrograms", config.dataset.n_sample_images,
+                )
+                for sample_path in sample_paths:
+                    mlflow.log_artifact(str(sample_path), artifact_path="sample_spectrograms")
             print(f"run_id={mlflow.active_run().info.run_id} dataset_path={dataset.out_file}")
     return dataset.out_file
 

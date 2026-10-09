@@ -84,6 +84,9 @@ class SimCLRConfig(StrictBaseModel):
     max_grad_norm: Optional[float] = None
     """Clip gradients to this global L2 norm before each optimizer step; None
     disables clipping. Independent of amp."""
+    early_stopping_patience: Optional[int] = Field(default=None, ge=1)
+    """Stop a fold once val loss has gone this many epochs without improving;
+    None trains for all epochs. Requires a val loader."""
 
 
 class MoCoConfig(StrictBaseModel):
@@ -108,6 +111,9 @@ class MoCoConfig(StrictBaseModel):
     max_grad_norm: Optional[float] = None
     """Clip gradients to this global L2 norm before each optimizer step; None
     disables clipping. Independent of amp."""
+    early_stopping_patience: Optional[int] = Field(default=None, ge=1)
+    """Stop a fold once val loss has gone this many epochs without improving;
+    None trains for all epochs. Requires a val loader."""
 
 
 class MoCoV3Config(StrictBaseModel):
@@ -132,6 +138,9 @@ class MoCoV3Config(StrictBaseModel):
     max_grad_norm: Optional[float] = None
     """Clip gradients to this global L2 norm before each optimizer step; None
     disables clipping. Independent of amp."""
+    early_stopping_patience: Optional[int] = Field(default=None, ge=1)
+    """Stop a fold once val loss has gone this many epochs without improving;
+    None trains for all epochs. Requires a val loader."""
 
 
 class ClassifierConfig(StrictBaseModel):
@@ -156,6 +165,9 @@ class ClassifierConfig(StrictBaseModel):
     max_grad_norm: Optional[float] = None
     """Clip gradients to this global L2 norm before each optimizer step; None
     disables clipping. Independent of amp."""
+    early_stopping_patience: Optional[int] = Field(default=None, ge=1)
+    """Stop a fold once val loss has gone this many epochs without improving;
+    None trains for all epochs. Requires a val loader."""
     eval_every: Optional[int] = None
     """Every N epochs, log _evaluate's metrics (val / test) to mlflow Requires a val loader."""
     lr_scheduler: bool = False

@@ -27,6 +27,10 @@ class EmbeddingsConfig(StrictBaseModel):
     mlflow_id: Optional[str] = None
     """run_id to embed. null = the run this pipeline invocation's own
     model_trainer stage just produced -- see pipeline.run_pipeline."""
+    checkpoint_mlflow_id: Optional[str] = None
+    """run_id whose model_trainer checkpoint embeds this config's own
+    preprocessor dataset, logged under a new untrained run. null = run_id's
+    own checkpoint."""
     reuse_embeddings_path: Optional[str] = None
     """A prior run's data_dir/embeddings/<run_id>/fold<n>.h5. Skips every other
     stage and only reruns the linear probe on it, as a new nested run under <run_id>."""

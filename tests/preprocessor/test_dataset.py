@@ -1,7 +1,12 @@
+import h5py
+import numpy as np
 import pandas as pd
 
-from encoder_pipeline.preprocessor.config import AnnotationConfig, AudioFileConfig, DatasetConfig, SpectrogramConfig
+from encoder_pipeline.preprocessor.config import (
+    AnnotationConfig, AudioFileConfig, DatasetConfig, PreprocessorConfig, SpectrogramConfig,
+)
 from encoder_pipeline.preprocessor.dataset import Dataset
+from encoder_pipeline.preprocessor.samples import save_sample_images
 
 
 def _write_csv(path, labels):
@@ -43,3 +48,25 @@ def test_classes_to_drop_changes_the_output_hash(tmp_path):
     dropped = _dataset(csv, tmp_path, classes_to_drop=["Background"])
 
     assert plain.content_hash != dropped.content_hash
+
+
+def test_save_sample_images_writes_one_grid_per_class(tmp_path):
+    labels = ["HW"] * 5 + ["Background"] * 2
+    with h5py.File(tmp_path / "d.h5", "w") as h5:
+        h5.create_dataset("spec", data=np.random.default_rng(0).normal(size=(len(labels), 16, 20)).astype("float32"))
+        h5.create_dataset("Labels", data=labels, dtype=h5py.string_dtype())
+        h5.create_dataset("uid", data=np.arange(len(labels)))
+    config = PreprocessorConfig(dataset=DatasetConfig(annotations_csv="unused.csv"))
+
+    paths = save_sample_images(str(tmp_path / "d.h5"), config, tmp_path / "samples", n_per_class=3)
+
+    assert sorted(p.name for p in paths) == ["Background.png", "HW.png"]
+    assert all(p.stat().st_size > 0 for p in paths)
+
+
+def test_save_sample_images_skips_metadata_only_datasets(tmp_path):
+    with h5py.File(tmp_path / "d.h5", "w") as h5:
+        h5.create_dataset("Labels", data=["HW"], dtype=h5py.string_dtype())
+    config = PreprocessorConfig(dataset=DatasetConfig(annotations_csv="unused.csv"))
+
+    assert save_sample_images(str(tmp_path / "d.h5"), config, tmp_path / "samples", n_per_class=3) == []
