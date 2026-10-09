@@ -138,9 +138,14 @@ class ClassifierConfig(StrictBaseModel):
     """Backbone + linear classification head"""
 
     backbone_name: backbone = "resnet18"
+    init_checkpoint: Optional[str] = None
+    """Local path to a fold<n>_best.pt / fold<n>_last.pt written by a prior
+    classifier run; its weights (backbone + head) are loaded before training,
+    for fine-tuning. Needs the same backbone_name and class list. Unset =
+    train from scratch."""
     augment: SpectrogramClassifierAugmentConfig = SpectrogramClassifierAugmentConfig()
     epochs: int = 10
-    optimizer: Literal["adam", "adamw", "sgd", "rmsprop"] = "adam"
+    optimizer:Literal["adam", "adamw", "sgd", "rmsprop"] = "adam"
     lr: float = 3e-4
     weight_decay: float = 1e-6
     momentum: float = 0.9

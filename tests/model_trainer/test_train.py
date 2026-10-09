@@ -37,6 +37,16 @@ def test_classifier_trainer_builds_the_configured_optimizer():
     assert trainer.optimizer.param_groups[0]["momentum"] == 0.95
 
 
+def test_classifier_trainer_loads_init_checkpoint_weights(tmp_path):
+    source = ClassifierTrainer(ClassifierConfig(device="cpu"), num_classes=3)
+    checkpoint_path = tmp_path / "fold0_best.pt"
+    torch.save({"model": source.model, "spectrogram_config": None}, checkpoint_path)
+
+    trainer = ClassifierTrainer(ClassifierConfig(device="cpu", init_checkpoint=str(checkpoint_path)), num_classes=3)
+    for key, value in source.model.state_dict().items():
+        assert torch.equal(trainer.model.state_dict()[key], value)
+
+
 def test_classifier_trainer_scheduler_defaults_off():
     trainer = ClassifierTrainer(ClassifierConfig(device="cpu"), num_classes=3)
     assert trainer.scheduler is None
@@ -78,6 +88,8 @@ def test_fit_calls_on_epoch_end_once_per_epoch_and_returns_final_metrics(tmp_pat
     assert [epoch for epoch, _ in seen] == [0, 1, 2]  # one call per epoch, last included
     assert "val_loss" in seen[0][1]
     assert {"best_val_loss", "val_f1", "test_f1"} <= results.keys()  # eval metrics merged into the return
+    assert {f"test_{m}_{c}" for m in ("precision", "recall", "f1", "pr_auc") for c in ("a", "b")} <= results.keys()
+    assert "val_f1_a" not in results  # per-class metrics are test-only, like the linear probe's
     assert seen[-1][1] == results  # the final call carries the full metric dict
 
 

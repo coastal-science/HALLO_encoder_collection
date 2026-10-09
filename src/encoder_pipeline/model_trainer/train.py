@@ -13,7 +13,7 @@ from lightly.models.utils import update_momentum
 from lightly.utils.scheduler import cosine_schedule
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from encoder_pipeline.evaluation.metrics import classification_metrics
+from encoder_pipeline.evaluation.metrics import classification_metrics, per_class_metrics
 from encoder_pipeline.evaluation.predictions import predictions_frame
 from encoder_pipeline.model_trainer.config import (
     ClassifierConfig, MoCoConfig, MoCoV3Config, ModelTrainerConfig, SimCLRConfig,
@@ -132,7 +132,8 @@ class Trainer(ABC):
     ) -> dict[str, float]:
         """Runs once, after fit()'s epoch loop, on self.model (the best
         checkpoint if one was saved). Returns test/val metrics keyed by
-        "{split}_{metric_name}. When predictions_path is given, also writes
+        "{split}_{metric_name}", plus per-class test metrics keyed
+        "test_{metric_name}_{class}". When predictions_path is given, also writes
         the per-sample test/val predictions there as a csv."""
         return {}
 
@@ -243,6 +244,9 @@ class ClassifierTrainer(Trainer):
         self.device = torch.device(config.device)
         self.epochs = config.epochs
         self.model = ClassifierModel(config, num_classes).to(self.device)
+        if config.init_checkpoint is not None:
+            bundle = torch.load(config.init_checkpoint, map_location=self.device, weights_only=False)
+            self.model.load_state_dict(bundle["model"].state_dict())
         self.augment = SpectrogramClassifierAugment(config.augment)
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = build_optimizer(
@@ -297,8 +301,11 @@ class ClassifierTrainer(Trainer):
             y_true_arr, y_pred_arr, y_score_arr = np.concatenate(y_true), np.concatenate(y_pred), np.concatenate(y_score)
             for name, value in classification_metrics(y_true_arr, y_pred_arr, y_score_arr).items():
                 metrics[f"{split}_{name}"] = value
+            dataset = loader.dataset.dataset
+            if split == "test":
+                for name, value in per_class_metrics(y_true_arr, y_pred_arr, y_score_arr, dataset.classes).items():
+                    metrics[f"test_{name}"] = value
             if row_idx is not None:
-                dataset = loader.dataset.dataset
                 uids = load_uids(dataset.hdf5_path)[row_idx]
                 frames.append(predictions_frame(split, uids, y_true_arr, y_score_arr, dataset.classes))
         if frames:
