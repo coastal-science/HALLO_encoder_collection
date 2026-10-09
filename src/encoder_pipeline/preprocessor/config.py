@@ -125,6 +125,9 @@ class DatasetConfig(StrictBaseModel):
     """Label values (matched against the 'Labels' column) to drop from the
     annotations before building the dataset. Their rows never enter the HDF5,
     so they're absent from every later split."""
+    n_sample_images: int = 8
+    """Spectrograms per class saved as a <class>.png grid and logged to the
+    preprocessor's MLflow run under sample_spectrograms/. 0 disables it."""
     def resolve_max_workers(self) -> Optional[int]:
         if self.max_workers is None:
             return None

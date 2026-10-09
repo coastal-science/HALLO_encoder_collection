@@ -1,4 +1,6 @@
-from concurrent.futures import ProcessPoolExecutor, as_completed
+import os
+from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, as_completed, wait
+from itertools import islice
 from pathlib import Path
 from typing import Optional, Union
 
@@ -163,39 +165,47 @@ class Dataset:
         grouped = df.groupby(self.dataset_config.local_file_col)
         metadata_columns = self.dataset_config.metadata_columns or list(df.columns)
         metadata: dict[str, list] = {col: [None] * len(df) for col in metadata_columns}
-        with h5py.File(tmp_path, "w") as h5, \
-                ProcessPoolExecutor(max_workers=self.dataset_config.resolve_max_workers()) as pool:
-            n_rows_by_future = {
-                pool.submit(
-                    Dataset._process_file,
-                    file_path,
-                    [{"_row_index": idx, **row} for idx, row in zip(rows.index, rows.to_dict("records"))],
-                    self.spec_config, self.audio_file_config, self.annotation_config,
-                ): len(rows)
-                for file_path, rows in grouped
-            }
+        n_workers = self.dataset_config.resolve_max_workers() or os.cpu_count() or 1
+        with h5py.File(tmp_path, "w") as h5, ProcessPoolExecutor(max_workers=n_workers) as pool:
+            file_groups = iter(grouped)
+            n_rows_by_future: dict[Future, int] = {}
             specs_raw = None
             valid_indices: set[int] = set()
             with tqdm(total=len(df), desc="computing spectrograms", unit="row") as pbar:
-                for future in as_completed(list(n_rows_by_future)):
-                    # pop + del as we go
-                    n_rows = n_rows_by_future.pop(future)
-                    results = future.result()
-                    for result in results:
-                        # create hdf5 dataset to fill in with the rest of the spectrogram data
-                        if specs_raw is None:
-                            specs_raw = h5.create_dataset(
-                                "spec_raw", shape=(len(df), *result["spec"].shape), dtype=result["spec"].dtype,
-                                chunks=(1, *result["spec"].shape),
-                            )
-                        # insert row in correct index (as_completed(futures) may not be in same order as df)
-                        row_index = result["_row_index"]
-                        specs_raw[row_index] = result["spec"]
-                        valid_indices.add(row_index)
-                        for col in metadata_columns:
-                            metadata[col][row_index] = result[col]
-                    pbar.update(n_rows)
-                    del results, future
+                while True:
+                    # at most n_workers files are submitted but not yet written to the hdf5, so the
+                    # workers can't pile up finished spectrograms in memory faster than they're written
+                    for file_path, rows in islice(file_groups, n_workers - len(n_rows_by_future)):
+                        future = pool.submit(
+                            Dataset._process_file,
+                            file_path,
+                            [{"_row_index": idx, **row} for idx, row in zip(rows.index, rows.to_dict("records"))],
+                            self.spec_config, self.audio_file_config, self.annotation_config,
+                        )
+                        n_rows_by_future[future] = len(rows)
+                    if not n_rows_by_future:
+                        break
+                    done, _ = wait(n_rows_by_future, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        # pop + del as we go
+                        n_rows = n_rows_by_future.pop(future)
+                        results = future.result()
+                        for result in results:
+                            # create hdf5 dataset to fill in with the rest of the spectrogram data
+                            if specs_raw is None:
+                                specs_raw = h5.create_dataset(
+                                    "spec_raw", shape=(len(df), *result["spec"].shape), dtype=result["spec"].dtype,
+                                    chunks=(1, *result["spec"].shape),
+                                )
+                            # insert row in correct index (files finish in a different order than df)
+                            row_index = result["_row_index"]
+                            specs_raw[row_index] = result["spec"]
+                            valid_indices.add(row_index)
+                            for col in metadata_columns:
+                                metadata[col][row_index] = result[col]
+                        pbar.update(n_rows)
+                        del results, future
+                    del done
 
             if specs_raw is None:
                 raise ValueError("every row's Annotation failed -- nothing to write, see preceding skip logs")

@@ -47,6 +47,7 @@ class Trainer(ABC):
     amp: bool = False
     max_grad_norm: Optional[float] = None
     eval_every: Optional[int] = None
+    early_stopping_patience: Optional[int] = None
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None
 
     def _autocast(self) -> torch.autocast:
@@ -69,9 +70,11 @@ class Trainer(ABC):
         out_dir = Path(f"{data_dir}/model_trainer/{mlflow.active_run().info.run_id}")
         out_dir.mkdir(parents=True, exist_ok=True)
         best_path = out_dir / f"fold{fold}_best.pt"
+        assert self.early_stopping_patience is None or "val" in loaders, "early_stopping_patience requires a val loader"
         best_val_loss = math.inf
         best_epoch = -1
         last_eval_best_val_loss = math.inf
+        last_epoch = self.epochs - 1
         epoch_losses: dict[str, float] = {}
         for epoch in tqdm(range(self.epochs)):
             train_loss = self._run_epoch(loaders["train"], train=True)
@@ -88,6 +91,10 @@ class Trainer(ABC):
                     best_val_loss = val_loss
                     best_epoch = epoch
                     torch.save({"model": self.model, "spectrogram_config": spectrogram_config}, best_path)
+            if self._should_stop(epoch, best_epoch):
+                last_epoch = epoch
+                mlflow.log_metric(f"fold{fold}_stopped_epoch", epoch)
+                break
             if (
                 self.eval_every is not None and (epoch + 1) % self.eval_every == 0
                 and epoch < self.epochs - 1 and best_val_loss < last_eval_best_val_loss
@@ -118,8 +125,15 @@ class Trainer(ABC):
         if "val" in loaders:
             results["best_val_loss"] = best_val_loss
         if on_epoch_end is not None:
-            on_epoch_end(self.epochs - 1, results)
+            on_epoch_end(last_epoch, results)
         return results
+
+    def _should_stop(self, epoch: int, best_epoch: int) -> bool:
+        """True once val loss has gone early_stopping_patience epochs without
+        improving, unless this is already the last epoch."""
+        if self.early_stopping_patience is None or epoch == self.epochs - 1:
+            return False
+        return epoch - best_epoch >= self.early_stopping_patience
 
     @abstractmethod
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
@@ -147,6 +161,7 @@ class SimCLRTrainer(Trainer):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
         self.amp = config.amp
         self.max_grad_norm = config.max_grad_norm
+        self.early_stopping_patience = config.early_stopping_patience
 
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
         self.model.train(train)
@@ -179,6 +194,7 @@ class MoCoTrainer(Trainer):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
         self.amp = config.amp
         self.max_grad_norm = config.max_grad_norm
+        self.early_stopping_patience = config.early_stopping_patience
 
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
         self.model.train(train)
@@ -211,6 +227,7 @@ class MoCoV3Trainer(Trainer):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
         self.amp = config.amp
         self.max_grad_norm = config.max_grad_norm
+        self.early_stopping_patience = config.early_stopping_patience
         self._step = 0
         self._total_steps = 0
 
@@ -256,6 +273,7 @@ class ClassifierTrainer(Trainer):
         )
         self.amp = config.amp
         self.max_grad_norm = config.max_grad_norm
+        self.early_stopping_patience = config.early_stopping_patience
         self.eval_every = config.eval_every
 
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
