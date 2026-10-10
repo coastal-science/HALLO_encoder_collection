@@ -9,6 +9,7 @@ from lightly.models.utils import deactivate_requires_grad
 from encoder_pipeline.model_trainer.config import (
     ClassifierConfig, EfficientNetVariant, MoCoConfig, MoCoV3Config, ResNetVariant, SimCLRConfig, backbone,
 )
+from encoder_pipeline.model_trainer.ssamba import SSAMBABackbone
 
 
 class ResNetBackbone(nn.Module):
@@ -115,10 +116,23 @@ class MoCoV3Model(nn.Module):
         return self.projection_head_momentum(self.backbone_momentum(x))
 
 
+def build_ssamba_backbone(config: ClassifierConfig) -> SSAMBABackbone:
+    """SSAMBA encoder for a classifier, initialised from ssamba.pretrained_path if set."""
+    assert config.ssamba is not None, "model_trainer.classifier.ssamba is required for an ssamba_* backbone_name"
+    ssamba_backbone = SSAMBABackbone(config.backbone_name, config.ssamba)
+    if config.ssamba.pretrained_path is not None:
+        bundle = torch.load(config.ssamba.pretrained_path, map_location="cpu", weights_only=False)
+        ssamba_backbone.load_state_dict(bundle["model"].backbone.state_dict())
+    return ssamba_backbone
+
+
 class ClassifierModel(nn.Module):
     def __init__(self, config: ClassifierConfig, num_classes: int) -> None:
         super().__init__()
-        self.backbone = build_backbone(config.backbone_name)
+        if config.backbone_name.startswith("ssamba"):
+            self.backbone = build_ssamba_backbone(config)
+        else:
+            self.backbone = build_backbone(config.backbone_name)
         self.classifier = nn.Linear(self.backbone.out_features, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

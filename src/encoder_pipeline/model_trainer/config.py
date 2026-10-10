@@ -65,6 +65,31 @@ EfficientNetVariant = Literal[
     "efficientnet_b4", "efficientnet_b5", "efficientnet_b6", "efficientnet_b7",
 ]
 backbone: TypeAlias = Union[ResNetVariant, EfficientNetVariant]
+SSAMBAVariant = Literal["ssamba_tiny", "ssamba_small", "ssamba_base"]
+
+
+class SSAMBAEncoderConfig(StrictBaseModel):
+    """Input + patch geometry of the SSAMBA (Vision Mamba) encoder"""
+
+    input_fdim: int
+    """Spectrogram frequency bins, e.g. the preprocessor's n_mels."""
+    input_tdim: int
+    """Spectrogram time frames."""
+    fshape: int = 16
+    """Patch height in frequency bins; patches don't overlap."""
+    tshape: int = 16
+    """Patch width in time frames; frames past the last whole patch are unused."""
+    drop_path_rate: float = 0.1
+    """Stochastic depth rate of the last block, ramped linearly from 0."""
+
+
+class SSAMBAClassifierConfig(SSAMBAEncoderConfig):
+    """SSAMBA encoder used as a classifier backbone"""
+
+    pretrained_path: Optional[str] = None
+    """Local path to a fold<n>_best.pt / fold<n>_last.pt written by a
+    paradigm 'ssamba' run; its encoder weights are loaded before training.
+    Needs the same variant and geometry. Unset = train from scratch."""
 
 
 class SimCLRConfig(StrictBaseModel):
@@ -143,10 +168,41 @@ class MoCoV3Config(StrictBaseModel):
     None trains for all epochs. Requires a val loader."""
 
 
+class SSAMBAConfig(SSAMBAEncoderConfig):
+    """SSAMBA encoder + its masked spectrogram patch modelling heads"""
+
+    backbone_name: SSAMBAVariant = "ssamba_tiny"
+    mask_patch: int = 400
+    """Patches masked per clip; must be below the clip's patch count."""
+    cluster: bool = True
+    """Mask square clusters of 3-5 patches a side instead of single patches."""
+    mse_weight: float = 10.0
+    """Loss = InfoNCE + mse_weight * reconstruction MSE."""
+    epochs: int = 10
+    lr: float = 1e-4
+    weight_decay: float = 5e-7
+    device: str = Field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
+    amp: bool = False
+    """Mixed precision: bf16-autocast the forward / loss on self.device."""
+    max_grad_norm: Optional[float] = None
+    """Clip gradients to this global L2 norm before each optimizer step; None
+    disables clipping. Independent of amp."""
+    early_stopping_patience: Optional[int] = Field(default=None, ge=1)
+    """Stop a fold once val loss has gone this many epochs without improving;
+    None trains for all epochs. Requires a val loader."""
+    lr_scheduler: bool = False
+    """Cosine-anneal lr from config.lr to lr_scheduler_min_lr over config.epochs
+    via torch.optim.lr_scheduler.CosineAnnealingLR."""
+    lr_scheduler_min_lr: float = 0.0
+    """Final lr at the end of cosine annealing; ignored when lr_scheduler is False."""
+
+
 class ClassifierConfig(StrictBaseModel):
     """Backbone + linear classification head"""
 
-    backbone_name: backbone = "resnet18"
+    backbone_name: Union[backbone, SSAMBAVariant] = "resnet18"
+    ssamba: Optional[SSAMBAClassifierConfig] = None
+    """Required when backbone_name is an ssamba_* variant."""
     init_checkpoint: Optional[str] = None
     """Local path to a fold<n>_best.pt / fold<n>_last.pt written by a prior
     classifier run; its weights (backbone + head) are loaded before training,
@@ -188,7 +244,7 @@ class SearchParam(StrictBaseModel):
 
 
 class RayTuneConfig(StrictBaseModel):
-    """Ray Tune search over the classifier paradigm; consumed by
+    """Ray Tune search over the classifier / ssamba paradigm; consumed by
     model_trainer.hpo.run_tuning when enabled."""
 
     enabled: bool = False
@@ -207,19 +263,27 @@ class RayTuneConfig(StrictBaseModel):
     resources_per_trial: dict[str, float] = {"cpu": 4, "gpu": 1}
     storage_path: Optional[str] = None
     """Ray Tune results dir; None -> <data_dir>/model_trainer/ray_tune."""
+    max_epochs: Optional[int] = None
+    """Epochs each trial trains for at most (ASHA's max_t); None = the
+    paradigm's own epochs."""
+    refit_best: bool = False
+    """After the search, train the best trial's config for the paradigm's full
+    epochs in the driver run, which then holds the final checkpoint."""
 
 
 class ModelTrainerConfig(StrictBaseModel):
     run_name: Optional[str] = None
     """MLflow sub-run name. If unset, MLflow auto-generates one."""
     dataloader: DataLoaderConfig = DataLoaderConfig()
-    paradigm: Literal["simclr", "moco", "moco_v3", "classifier"] = "simclr"
+    paradigm: Literal["simclr", "moco", "moco_v3", "ssamba", "classifier"] = "simclr"
     """Which Trainer train_model runs."""
     simclr: SimCLRConfig = SimCLRConfig()
     moco: Optional[MoCoConfig] = None
     """Required when paradigm == 'moco'."""
     moco_v3: Optional[MoCoV3Config] = None
     """Required when paradigm == 'moco_v3'."""
+    ssamba: Optional[SSAMBAConfig] = None
+    """Required when paradigm == 'ssamba'."""
     classifier: Optional[ClassifierConfig] = None
     """Required when paradigm == 'classifier'."""
     tune: Optional[RayTuneConfig] = None

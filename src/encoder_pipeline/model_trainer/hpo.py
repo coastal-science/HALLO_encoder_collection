@@ -1,10 +1,12 @@
-"""Ray Tune hyperparameter search over the classifier paradigm, driven by
+"""Ray Tune hyperparameter search over the classifier / ssamba paradigm, driven by
 model_trainer.tune. Each trial is an MLflow run nested under the trainer run."""
 
 from pathlib import Path
 from typing import Any, Optional
 
 import mlflow
+import ray
+import torch
 from mlflow.entities import RunStatus
 from mlflow.utils.mlflow_tags import MLFLOW_PARENT_RUN_ID
 from ray import tune
@@ -76,13 +78,17 @@ def run_tuning(
     """Runs model_trainer.tune's search and logs the best config / metric to the
     driver run. Returns {"best_config", "best_metrics"}."""
     tune_cfg = config.tune
-    assert config.classifier is not None, "model_trainer.classifier is required when tune is enabled"
+    assert config.paradigm in ("classifier", "ssamba"), "model_trainer.tune supports the classifier / ssamba paradigms"
+    paradigm_config = getattr(config, config.paradigm)
+    assert paradigm_config is not None, f"model_trainer.{config.paradigm} is required when tune is enabled"
+    max_epochs = tune_cfg.max_epochs or paradigm_config.epochs
     assert config.dataloader.n_folds == 1, "model_trainer.tune expects dataloader.n_folds == 1"
 
     dataset_path = str(Path(dataset_path).resolve())
     data_dir = str(Path(data_dir).resolve())
 
     base = config.model_copy(update={"tune": RayTuneConfig()}, deep=True)
+    getattr(base, config.paradigm).epochs = max_epochs
     if base.dataloader.splits_path:
         base.dataloader.splits_path = str(Path(base.dataloader.splits_path).resolve())
 
@@ -115,10 +121,13 @@ def run_tuning(
 
     scheduler = ASHAScheduler(
         time_attr="training_iteration",
-        max_t=config.classifier.epochs,
+        max_t=max_epochs,
         grace_period=tune_cfg.grace_period,
         reduction_factor=tune_cfg.reduction_factor,
     )
+    if not ray.is_initialized():
+        # GPU count from torch: Ray's own NVML-based detection reports 0 when nvidia-smi is unusable
+        ray.init(num_gpus=torch.cuda.device_count())
     storage_path = tune_cfg.storage_path or str(Path(data_dir).resolve() / "model_trainer" / "ray_tune")
 
     tuner = tune.Tuner(

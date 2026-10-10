@@ -10,7 +10,7 @@ from encoder_pipeline.common.config_utils import load_pipeline_config
 from encoder_pipeline.common.mlflow_utils import configure_mlflow, download_artifact, flatten_params
 from encoder_pipeline.model_trainer.config import ModelTrainerConfig
 from encoder_pipeline.model_trainer.data_loader import build_dataloaders
-from encoder_pipeline.model_trainer.hpo import run_tuning
+from encoder_pipeline.model_trainer.hpo import apply_sample, run_tuning
 from encoder_pipeline.model_trainer.train import train_model
 
 
@@ -38,11 +38,15 @@ def run_model_trainer(
             dataloaders = None
             try:
                 if config.tune is not None and config.tune.enabled:
-                    run_tuning(
+                    best = run_tuning(
                         config, dataset_path, data_dir, run.info.run_id,
                         mlflow.get_tracking_uri(), mlflow.get_experiment(run.info.experiment_id).name,
                         spectrogram_config,
                     )
+                    if config.tune.refit_best:
+                        refit_config = apply_sample(config, best["best_config"])
+                        dataloaders = build_dataloaders(dataset_path, refit_config.dataloader, data_dir)
+                        train_model(refit_config, dataloaders, data_dir, spectrogram_config)
                 else:
                     dataloaders = build_dataloaders(dataset_path, config.dataloader, data_dir)
                     train_model(config, dataloaders, data_dir, spectrogram_config)

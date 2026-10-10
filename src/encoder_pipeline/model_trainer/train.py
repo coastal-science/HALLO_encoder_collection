@@ -16,10 +16,11 @@ from tqdm import tqdm
 from encoder_pipeline.evaluation.metrics import classification_metrics, per_class_metrics
 from encoder_pipeline.evaluation.predictions import predictions_frame
 from encoder_pipeline.model_trainer.config import (
-    ClassifierConfig, MoCoConfig, MoCoV3Config, ModelTrainerConfig, SimCLRConfig,
+    ClassifierConfig, MoCoConfig, MoCoV3Config, ModelTrainerConfig, SimCLRConfig, SSAMBAConfig,
 )
 from encoder_pipeline.model_trainer.data_loader import load_uids, ordered_loader
 from encoder_pipeline.model_trainer.models import ClassifierModel, MoCoModel, MoCoV3Model, SimCLRModel
+from encoder_pipeline.model_trainer.ssamba import SSAMBAModel
 from encoder_pipeline.model_trainer.augment import SpectrogramClassifierAugment, SpectrogramSSLAugment
 from encoder_pipeline.preprocessor.config import SpectrogramConfig
 
@@ -256,6 +257,41 @@ class MoCoV3Trainer(Trainer):
         return total_loss / len(loader.dataset)
 
 
+class SSAMBATrainer(Trainer):
+    def __init__(self, config: SSAMBAConfig) -> None:
+        self.device = torch.device(config.device)
+        self.epochs = config.epochs
+        self.mse_weight = config.mse_weight
+        self.model = SSAMBAModel(config).to(self.device)
+        self.optimizer = torch.optim.AdamW(
+            self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay, betas=(0.95, 0.999),
+        )
+        self.scheduler = (
+            torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer, T_max=config.epochs, eta_min=config.lr_scheduler_min_lr,
+            )
+            if config.lr_scheduler else None
+        )
+        self.amp = config.amp
+        self.max_grad_norm = config.max_grad_norm
+        self.early_stopping_patience = config.early_stopping_patience
+
+    def _run_epoch(self, loader: DataLoader, train: bool) -> float:
+        self.model.train(train)
+        total_loss = 0.0
+        for specs, _labels in loader:
+            specs = specs.to(self.device).unsqueeze(1)
+            with torch.set_grad_enabled(train), self._autocast():
+                nce, mse, _acc = self.model(specs)
+                loss = nce + self.mse_weight * mse
+            if not torch.isfinite(loss):
+                raise FloatingPointError(f"ssamba loss diverged ({loss.item()})")
+            if train:
+                self._optimizer_step(loss)
+            total_loss += loss.item() * specs.size(0)
+        return total_loss / len(loader.dataset)
+
+
 class ClassifierTrainer(Trainer):
     def __init__(self, config: ClassifierConfig, num_classes: int) -> None:
         self.device = torch.device(config.device)
@@ -344,8 +380,8 @@ def train_model(
     on_epoch_end: Optional[Callable[[int, dict[str, float]], None]] = None,
 ) -> dict[str, float]:
     """Fits every fold with the paradigm's Trainer; returns its metrics averaged
-    across folds. on_epoch_end is forwarded to the classifier Trainer for HPO
-    live reporting (the SSL paradigms ignore it)."""
+    across folds. on_epoch_end is forwarded to the classifier / ssamba Trainer
+    for HPO live reporting (the other SSL paradigms ignore it)."""
     if config.paradigm == "simclr":
         assert config.simclr is not None, "model_trainer.simclr config is required when paradigm is 'simclr'"
         results = [
@@ -362,6 +398,12 @@ def train_model(
         assert config.moco_v3 is not None, "model_trainer.moco_v3 config is required when paradigm is 'moco_v3'"
         results = [
             MoCoV3Trainer(config.moco_v3).fit(loaders, fold, data_dir, spectrogram_config)
+            for fold, loaders in enumerate(dataloaders)
+        ]
+    elif config.paradigm == "ssamba":
+        assert config.ssamba is not None, "model_trainer.ssamba config is required when paradigm is 'ssamba'"
+        results = [
+            SSAMBATrainer(config.ssamba).fit(loaders, fold, data_dir, spectrogram_config, on_epoch_end)
             for fold, loaders in enumerate(dataloaders)
         ]
     else:
