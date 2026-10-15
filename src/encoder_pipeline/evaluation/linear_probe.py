@@ -42,7 +42,8 @@ class LinearProbe:
         }
         x_train, y_train = tensors["train"]
 
-        model = nn.Linear(x_train.shape[1], int(y_train.max().item()) + 1).to(device)
+        # sized by the full class list: a train split can lack classes that val / test have
+        model = nn.Linear(x_train.shape[1], len(class_names)).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=self.lr)
         criterion = nn.CrossEntropyLoss()
 

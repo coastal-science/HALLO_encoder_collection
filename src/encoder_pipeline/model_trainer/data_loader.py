@@ -62,11 +62,19 @@ def compute_splits(hdf5_path: str, config: DataLoaderConfig) -> list[dict[str, n
         return np.where(np.isin(groups, group_subset) & ~is_holdout)[0]
 
     if config.n_folds > 1:
+        # one fixed test set (the holdout, else test_size of the groups), then k-fold train / val over the rest
+        kfold_groups, test = unique_groups, {}
+        if config.test_holdout_col:
+            test = {"test": holdout_idx}
+        elif config.test_size > 0:
+            kfold_groups, test_groups = train_test_split(
+                unique_groups, test_size=config.test_size, random_state=config.split_seed,
+            )
+            test = {"test": row_idx(test_groups)}
         kfold = KFold(n_splits=config.n_folds, shuffle=True, random_state=config.split_seed)
-        test = {"test": holdout_idx} if config.test_holdout_col else {}
         return [
-            {"train": row_idx(unique_groups[train_pos]), "val": row_idx(unique_groups[val_pos]), **test}
-            for train_pos, val_pos in kfold.split(unique_groups)
+            {"train": row_idx(kfold_groups[train_pos]), "val": row_idx(kfold_groups[val_pos]), **test}
+            for train_pos, val_pos in kfold.split(kfold_groups)
         ]
 
     if config.test_holdout_col:

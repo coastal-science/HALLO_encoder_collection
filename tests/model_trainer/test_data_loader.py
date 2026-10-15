@@ -110,7 +110,7 @@ def test_holdout_raises_on_a_value_the_column_lacks(holdout_hdf5_path):
 
 
 def test_kfold_puts_every_group_in_val_exactly_once(hdf5_path):
-    config = DataLoaderConfig(n_folds=4, split_seed=0, col_to_group_by="file_id")
+    config = DataLoaderConfig(n_folds=4, test_size=0.0, split_seed=0, col_to_group_by="file_id")
     folds = compute_splits(hdf5_path, config)
     groups = _groups(hdf5_path, "file_id")
 
@@ -125,7 +125,7 @@ def test_kfold_puts_every_group_in_val_exactly_once(hdf5_path):
 
 
 def test_kfold_no_leakage_between_train_and_val(hdf5_path):
-    config = DataLoaderConfig(n_folds=4, split_seed=0, col_to_group_by="file_id")
+    config = DataLoaderConfig(n_folds=4, test_size=0.0, split_seed=0, col_to_group_by="file_id")
     folds = compute_splits(hdf5_path, config)
 
     for i, fold in enumerate(folds):
@@ -133,12 +133,28 @@ def test_kfold_no_leakage_between_train_and_val(hdf5_path):
 
 
 def test_kfold_all_rows_accounted_for_in_every_fold(hdf5_path):
-    config = DataLoaderConfig(n_folds=4, split_seed=0, col_to_group_by="file_id")
+    config = DataLoaderConfig(n_folds=4, test_size=0.0, split_seed=0, col_to_group_by="file_id")
     folds = compute_splits(hdf5_path, config)
 
     for i, fold in enumerate(folds):
         all_idx = sorted(np.concatenate([fold["train"], fold["val"]]))
         assert all_idx == list(range(8)), f"fold {i} doesn't cover every row"
+
+
+def test_kfold_with_test_size_keeps_the_same_test_groups_in_every_fold(hdf5_path):
+    config = DataLoaderConfig(n_folds=3, test_size=0.25, split_seed=0, col_to_group_by="file_id")
+    folds = compute_splits(hdf5_path, config)
+    groups = _groups(hdf5_path, "file_id")
+
+    assert len(folds) == 3
+    test_groups = set(groups[folds[0]["test"]])
+    assert len(test_groups) == 1
+    for fold in folds:
+        assert set(groups[fold["test"]]) == test_groups
+        assert not test_groups & (set(groups[fold["train"]]) | set(groups[fold["val"]]))
+        assert sorted(np.concatenate([fold["train"], fold["val"], fold["test"]])) == list(range(8))
+    # the 3 non-test groups are each val exactly once
+    assert sorted(g for fold in folds for g in set(groups[fold["val"]])) == sorted(set(groups) - test_groups)
 
 
 def test_no_col_to_group_by_splits_row_by_row(hdf5_path):
