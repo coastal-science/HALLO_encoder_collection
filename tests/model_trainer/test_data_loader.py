@@ -6,7 +6,7 @@ import torch
 
 from encoder_pipeline.model_trainer.config import DataLoaderConfig
 from encoder_pipeline.model_trainer.data_loader import (
-    class_balanced_sampler, compute_splits, holdout_val_from_train, load_saved_splits,
+    SpectrogramDataset, class_balanced_sampler, compute_splits, holdout_val_from_train, load_saved_splits,
 )
 
 
@@ -248,3 +248,22 @@ def test_class_balanced_sampler_draws_a_fresh_background_subset_each_epoch():
     torch.manual_seed(2)
     epoch2 = set(sampler)
     assert epoch1 != epoch2  # different random background windows drawn
+
+
+def _labelled_hdf5(tmp_path, labels: list[str]) -> str:
+    path = tmp_path / "labelled.h5"
+    with h5py.File(path, "w") as h5:
+        h5.create_dataset("spec", data=np.zeros((len(labels), 4)))
+        h5.create_dataset("Labels", data=labels, dtype=h5py.string_dtype())
+    return str(path)
+
+
+def test_spectrogram_dataset_fixed_classes_keep_absent_classes_and_order(tmp_path):
+    dataset = SpectrogramDataset(_labelled_hdf5(tmp_path, ["SRKW", "Background", "TKW"]), classes=["Background", "HW", "SRKW", "TKW"])
+    assert dataset.classes == ["Background", "HW", "SRKW", "TKW"]
+    assert dataset.labels == [2, 0, 3]
+
+
+def test_spectrogram_dataset_fixed_classes_reject_unlisted_labels(tmp_path):
+    with pytest.raises(ValueError, match="TKW"):
+        SpectrogramDataset(_labelled_hdf5(tmp_path, ["SRKW", "TKW"]), classes=["Background", "SRKW"])

@@ -125,6 +125,10 @@ class DatasetConfig(StrictBaseModel):
     """Label values (matched against the 'Labels' column) to drop from the
     annotations before building the dataset. Their rows never enter the HDF5,
     so they're absent from every later split."""
+    spec_dtype: Literal["float32", "float16"] = "float32"
+    """dtype the spectrograms are stored as in the HDF5 (always computed in float32). float16 halves the
+    file size; on dB spectrograms the rounding error is ~0.01 dB. Only enters the output hash when not
+    float32, so existing float32 files keep their hash."""
     n_sample_images: int = 8
     """Spectrograms per class saved as a <class>.png grid and logged to the
     preprocessor's MLflow run under sample_spectrograms/. 0 disables it."""

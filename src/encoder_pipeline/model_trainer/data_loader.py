@@ -14,7 +14,10 @@ from encoder_pipeline.model_trainer.config import DataLoaderConfig
 
 
 class SpectrogramDataset(Dataset):
-    def __init__(self, hdf5_path: str, label_col: str = "Labels", class_label_map: Optional[dict[str, str]] = None) -> None:
+    def __init__(
+        self, hdf5_path: str, label_col: str = "Labels", class_label_map: Optional[dict[str, str]] = None,
+        classes: Optional[list[str]] = None,
+    ) -> None:
         self.hdf5_path = hdf5_path
         self._h5: Optional[h5py.File] = None
 
@@ -23,7 +26,11 @@ class SpectrogramDataset(Dataset):
             labels = h5[label_col].asstr()[:]
         if class_label_map is not None:
             labels = [class_label_map.get(label, label) for label in labels]
-        self.classes = sorted(set(labels))
+        if classes is not None:
+            unknown = sorted(set(labels) - set(classes))
+            if unknown:
+                raise ValueError(f"labels {unknown} not in classes {classes}")
+        self.classes = list(classes) if classes is not None else sorted(set(labels))
         self.label_to_idx = {label: i for i, label in enumerate(self.classes)}
         self.labels = [self.label_to_idx[label] for label in labels]
 
@@ -212,7 +219,7 @@ def build_dataloaders(hdf5_path: str, config: DataLoaderConfig, data_dir: str) -
     splits_path = save_splits(hdf5_path, splits, out_dir=f"{data_dir}/model_trainer/{mlflow.active_run().info.run_id}")
     mlflow.log_artifact(splits_path)
 
-    dataset = SpectrogramDataset(hdf5_path, class_label_map=config.class_label_map)
+    dataset = SpectrogramDataset(hdf5_path, class_label_map=config.class_label_map, classes=config.classes)
 
     def loader(name: str, idx: np.ndarray) -> DataLoader:
         # keep the GPU fed: parallel HDF5 reads, pinned host buffers, workers

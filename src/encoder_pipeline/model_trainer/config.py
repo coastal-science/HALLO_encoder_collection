@@ -30,6 +30,11 @@ class DataLoaderConfig(StrictBaseModel):
     """Maps raw Labels values to collapsed labels before SpectrogramDataset
     builds its class list, e.g. {"SRKW": "KW", "TKW": "KW"}. Unmapped labels
     pass through unchanged."""
+    classes: Optional[list[str]] = None
+    """Fixed class list (post class_label_map), in index order, used instead of
+    the classes present in the data -- e.g. to keep a fine-tune's head the same
+    as its init_checkpoint's when some classes have no rows. Unset = sorted
+    labels present in the HDF5."""
     splits_path: Optional[str] = None
     """Local path to a previously-logged splits.csv to reuse instead of
     computing a fresh split. Unset = compute_splits as usual."""

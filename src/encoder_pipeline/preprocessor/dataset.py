@@ -38,6 +38,8 @@ class Dataset:
             "classes_to_drop": self.dataset_config.classes_to_drop,
             "run_name": self.run_name,
         }
+        if self.dataset_config.spec_dtype != "float32":
+            hash_params["spec_dtype"] = self.dataset_config.spec_dtype
         if metadata_only:
             # spectrogram / resampling don't touch a metadata-only file
             hash_params = {**hash_params, "spectrogram": None, "audio_file": None, "metadata_only": True}
@@ -194,7 +196,8 @@ class Dataset:
                             # create hdf5 dataset to fill in with the rest of the spectrogram data
                             if specs_raw is None:
                                 specs_raw = h5.create_dataset(
-                                    "spec_raw", shape=(len(df), *result["spec"].shape), dtype=result["spec"].dtype,
+                                    # h5py casts each float32 spectrogram to spec_dtype on write
+                                    "spec_raw", shape=(len(df), *result["spec"].shape), dtype=self.dataset_config.spec_dtype,
                                     chunks=(1, *result["spec"].shape),
                                 )
                             # insert row in correct index (files finish in a different order than df)

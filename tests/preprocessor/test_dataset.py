@@ -50,6 +50,39 @@ def test_classes_to_drop_changes_the_output_hash(tmp_path):
     assert plain.content_hash != dropped.content_hash
 
 
+def test_default_spec_dtype_keeps_the_float32_hash(tmp_path):
+    csv = _write_csv(tmp_path / "a.csv", ["HW", "Background"])
+    plain = _dataset(csv, tmp_path)
+
+    assert plain.content_hash == _dataset(csv, tmp_path, spec_dtype="float32").content_hash
+    assert plain.content_hash != _dataset(csv, tmp_path, spec_dtype="float16").content_hash
+
+
+def test_build_hdf5_stores_spec_dtype(tmp_path):
+    import soundfile as sf
+
+    sr = 8000
+    sf.write(tmp_path / "f.wav", np.random.default_rng(0).normal(scale=0.1, size=3 * sr).astype("float32"), sr)
+    csv = tmp_path / "a.csv"
+    pd.DataFrame({
+        "uid": [0, 1], "LocalPath": [str(tmp_path / "f.wav")] * 2, "FileBeginSec": [0.0, 1.0], "FileEndSec": [1.0, 2.0],
+        "Duration": [1.0, 1.0], "CenterTime": [0.5, 1.5], "Labels": ["HW", "Background"],
+    }).to_csv(csv, index=False)
+
+    specs = {}
+    for dtype in ["float32", "float16"]:
+        dataset = Dataset(
+            SpectrogramConfig(), AudioFileConfig(), AnnotationConfig(time_offset=1.0),
+            DatasetConfig(annotations_csv=str(csv), spec_dtype=dtype, max_workers=1), data_dir=str(tmp_path / dtype),
+        )
+        dataset.build_hdf5()
+        with h5py.File(dataset.out_file) as h5:
+            assert h5["spec"].dtype == dtype
+            specs[dtype] = h5["spec"][:].astype("float32")
+
+    np.testing.assert_allclose(specs["float16"], specs["float32"], atol=0.05)
+
+
 def test_save_sample_images_writes_one_grid_per_class(tmp_path):
     labels = ["HW"] * 5 + ["Background"] * 2
     with h5py.File(tmp_path / "d.h5", "w") as h5:
