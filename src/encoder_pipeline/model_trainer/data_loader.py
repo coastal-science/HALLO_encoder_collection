@@ -6,6 +6,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 import torch
+from loguru import logger
 from sklearn.model_selection import KFold, train_test_split
 from torch.utils.data import DataLoader, Dataset, Subset, WeightedRandomSampler
 
@@ -176,6 +177,72 @@ def holdout_val_from_train(
     return out
 
 
+def _read_column(h5: h5py.File, col: str) -> np.ndarray:
+    dset = h5[col]
+    return dset.asstr()[:] if h5py.check_string_dtype(dset.dtype) else dset[:]
+
+
+def drop_unplaceable_windows(hdf5_path: str, splits: list[dict[str, np.ndarray]]) -> list[dict[str, np.ndarray]]:
+    """Removes the rows with a NaN FileBeginSec / Duration from every split."""
+    with h5py.File(hdf5_path, "r") as h5:
+        begin = pd.to_numeric(pd.Series(_read_column(h5, "FileBeginSec")), errors="coerce").to_numpy()
+        duration = pd.to_numeric(pd.Series(_read_column(h5, "Duration")), errors="coerce").to_numpy()
+    unplaceable = np.isnan(begin) | np.isnan(duration)
+    logger.info("drop_unplaceable_windows: {} of {} rows have no window", int(unplaceable.sum()), len(unplaceable))
+    return [{name: idx[~unplaceable[idx]] for name, idx in split.items()} for split in splits]
+
+
+# start timestamps in Soundfile names: ONC / JASCO style 20120116T030002.576Z, else DCLDE / SMRU style 20161106_034800
+_FILENAME_TIMESTAMPS = [(r"(\d{8}T\d{6}(?:\.\d+)?)Z", "ISO8601"), (r"(\d{8}_\d{6})", "%Y%m%d_%H%M%S")]
+
+
+def window_centre_seconds(hdf5_path: str) -> np.ndarray:
+    """Absolute time (s since 2000-01-01) of every row's annotation centre:
+    the Soundfile name's start timestamp + FileBeginSec + Duration / 2."""
+    with h5py.File(hdf5_path, "r") as h5:
+        soundfiles = pd.Series(_read_column(h5, "Soundfile"))
+        begin = pd.to_numeric(pd.Series(_read_column(h5, "FileBeginSec")), errors="coerce")
+        duration = pd.to_numeric(pd.Series(_read_column(h5, "Duration")), errors="coerce")
+    file_start = pd.Series(pd.NaT, index=soundfiles.index, dtype="datetime64[ns]")
+    for pattern, fmt in _FILENAME_TIMESTAMPS:
+        todo = file_start.isna()
+        stamps = soundfiles[todo].str.extract(pattern)[0]
+        file_start[todo] = pd.to_datetime(stamps, format=fmt, errors="coerce")
+    if file_start.isna().any():
+        raise ValueError(f"no start timestamp in Soundfile names, e.g. {soundfiles[file_start.isna()].iloc[0]!r}")
+    return ((file_start - pd.Timestamp("2000-01-01")).dt.total_seconds() + begin + duration / 2).to_numpy()
+
+
+def drop_train_overlap(
+    hdf5_path: str, splits: list[dict[str, np.ndarray]], config: DataLoaderConfig,
+) -> list[dict[str, np.ndarray]]:
+    """Per fold, drops each train row whose window centre is within
+    config.train_overlap_tol_s of a config.train_overlap_splits row from another
+    config.col_to_group_by group, so the same moment recorded in two files (e.g.
+    two channels of a hydrophone array) can't sit on both sides of the split."""
+    times = window_centre_seconds(hdf5_path)
+    with h5py.File(hdf5_path, "r") as h5:
+        n = len(h5["Labels"])
+        groups = _read_column(h5, config.col_to_group_by) if config.col_to_group_by else np.arange(n)
+    tol = config.train_overlap_tol_s
+
+    out = []
+    for fold, split in enumerate(splits):
+        other = np.concatenate([split.get(name, np.array([], dtype=np.int64)) for name in config.train_overlap_splits])
+        other = other[np.argsort(times[other])]
+        other_times, other_groups = times[other], groups[other]
+        train = split["train"]
+        lo = np.searchsorted(other_times, times[train] - tol, "left")
+        hi = np.searchsorted(other_times, times[train] + tol, "right")
+        overlaps = np.array([(other_groups[a:b] != g).any() for a, b, g in zip(lo, hi, groups[train])], dtype=bool)
+        logger.info(
+            "fold {}: drop_train_overlap drops {} of {} train rows within {} s of a {} row",
+            fold, int(overlaps.sum()), len(train), tol, "/".join(config.train_overlap_splits),
+        )
+        out.append({**split, "train": train[~overlaps]})
+    return out
+
+
 def save_splits(hdf5_path: str, splits: list[dict[str, np.ndarray]], out_dir: str, uid_col: str = "uid") -> str:
     uids = load_uids(hdf5_path, uid_col)
 
@@ -216,6 +283,10 @@ def class_balanced_sampler(
 def build_dataloaders(hdf5_path: str, config: DataLoaderConfig, data_dir: str) -> list[dict[str, DataLoader]]:
     splits = load_saved_splits(hdf5_path, config.splits_path) if config.splits_path else compute_splits(hdf5_path, config)
     splits = holdout_val_from_train(hdf5_path, splits, config)
+    if config.drop_unplaceable_windows:
+        splits = drop_unplaceable_windows(hdf5_path, splits)
+    if config.train_overlap_tol_s is not None:
+        splits = drop_train_overlap(hdf5_path, splits, config)
     splits_path = save_splits(hdf5_path, splits, out_dir=f"{data_dir}/model_trainer/{mlflow.active_run().info.run_id}")
     mlflow.log_artifact(splits_path)
 

@@ -40,6 +40,18 @@ class DataLoaderConfig(StrictBaseModel):
     computing a fresh split. Unset = compute_splits as usual."""
     val_from_train_size: float = 0.0
     """Fraction of train groups held out as val when a fold has none."""
+    drop_unplaceable_windows: bool = False
+    """Leave rows with a NaN FileBeginSec / Duration out of every split. HDF5s
+    built before preprocessor/annotation.py raised on them hold these rows with
+    their window at 0 s of the file instead of on the annotation."""
+    train_overlap_tol_s: Optional[float] = None
+    """Drop each train row whose window centre is within this many seconds of
+    a train_overlap_splits row from another col_to_group_by group, e.g. the
+    same call recorded on another channel of a hydrophone array. Window centre
+    = the Soundfile name's start timestamp + FileBeginSec + Duration / 2.
+    Unset = keep every train row."""
+    train_overlap_splits: list[str] = ["test"]
+    """Splits whose rows' simultaneous copies train_overlap_tol_s drops from train."""
     oversample: bool = True
     """Oversample the train split so every class is drawn to the largest
     class's size each epoch, via a WeightedRandomSampler. Applies to any
