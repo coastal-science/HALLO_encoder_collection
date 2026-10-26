@@ -44,6 +44,9 @@ def run_pipeline(config: PipelineConfig) -> None:
         if config.model_trainer.tune is not None and config.model_trainer.tune.enabled:
             print("model_trainer.tune enabled, skipping embeddings .")
             return
+        if not config.embeddings.enabled:
+            print("embeddings.enabled is false, skipping embeddings.")
+            return
     else:
         run_id = config.embeddings.mlflow_id
         dataset_path = mlflow.get_run(run_id).data.params["dataset_path"]

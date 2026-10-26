@@ -1,0 +1,143 @@
+
+== tekteksen: 1135 test clips {'Background': 537, 'HW': 2, 'SRKW': 596, 'TKW': 0}
+  fold0 adaptation sets: adabn_train n=7703 [5383, 19, 2301, 0], adabn_balanced n=6903 [2304, 2343, 2256, 0], adabn_balanced_srkw_rest n=4602 [2291, 10, 2301, 0]
+  effnet_b1 fold0 zeroshot               SRKW-vs-rest P=0.687 R=0.753 F1=0.718 PR-AUC=0.815
+  effnet_b1 fold0 adabn_train            SRKW-vs-rest P=0.972 R=0.646 F1=0.776 PR-AUC=0.929
+  effnet_b1 fold0 adabn_balanced         SRKW-vs-rest P=1.000 R=0.495 F1=0.662 PR-AUC=0.950
+  effnet_b1 fold0 adabn_balanced_srkw_rest SRKW-vs-rest P=0.997 R=0.544 F1=0.704 PR-AUC=0.931
+  fold1 adaptation sets: adabn_train n=7746 [5508, 12, 2226, 0], adabn_balanced n=6678 [2229, 2250, 2199, 0], adabn_balanced_srkw_rest n=4452 [2219, 7, 2226, 0]
+  effnet_b1 fold1 zeroshot               SRKW-vs-rest P=0.687 R=0.753 F1=0.718 PR-AUC=0.815
+  effnet_b1 fold1 adabn_train            SRKW-vs-rest P=0.971 R=0.621 F1=0.757 PR-AUC=0.920
+  effnet_b1 fold1 adabn_balanced         SRKW-vs-rest P=1.000 R=0.465 F1=0.635 PR-AUC=0.940
+  effnet_b1 fold1 adabn_balanced_srkw_rest SRKW-vs-rest P=1.000 R=0.522 F1=0.686 PR-AUC=0.922
+  fold2 adaptation sets: adabn_train n=7851 [5539, 19, 2293, 0], adabn_balanced n=6879 [2247, 2321, 2311, 0], adabn_balanced_srkw_rest n=4586 [2281, 12, 2293, 0]
+  effnet_b1 fold2 zeroshot               SRKW-vs-rest P=0.687 R=0.753 F1=0.718 PR-AUC=0.815
+  effnet_b1 fold2 adabn_train            SRKW-vs-rest P=0.977 R=0.628 F1=0.764 PR-AUC=0.927
+  effnet_b1 fold2 adabn_balanced         SRKW-vs-rest P=1.000 R=0.482 F1=0.650 PR-AUC=0.950
+  effnet_b1 fold2 adabn_balanced_srkw_rest SRKW-vs-rest P=1.000 R=0.527 F1=0.690 PR-AUC=0.928
+  fold3 adaptation sets: adabn_train n=7716 [5457, 7, 2252, 0], adabn_balanced n=6756 [2174, 2283, 2299, 0], adabn_balanced_srkw_rest n=4504 [2248, 4, 2252, 0]
+  effnet_b1 fold3 zeroshot               SRKW-vs-rest P=0.687 R=0.753 F1=0.718 PR-AUC=0.815
+  effnet_b1 fold3 adabn_train            SRKW-vs-rest P=0.960 R=0.643 F1=0.770 PR-AUC=0.925
+  effnet_b1 fold3 adabn_balanced         SRKW-vs-rest P=1.000 R=0.530 F1=0.693 PR-AUC=0.954
+  effnet_b1 fold3 adabn_balanced_srkw_rest SRKW-vs-rest P=0.994 R=0.564 F1=0.719 PR-AUC=0.928
+  fold4 adaptation sets: adabn_train n=7696 [5461, 19, 2216, 0], adabn_balanced n=6648 [2151, 2216, 2281, 0], adabn_balanced_srkw_rest n=4432 [2210, 6, 2216, 0]
+  effnet_b1 fold4 zeroshot               SRKW-vs-rest P=0.687 R=0.753 F1=0.718 PR-AUC=0.815
+  effnet_b1 fold4 adabn_train            SRKW-vs-rest P=0.960 R=0.644 F1=0.771 PR-AUC=0.927
+  effnet_b1 fold4 adabn_balanced         SRKW-vs-rest P=1.000 R=0.500 F1=0.667 PR-AUC=0.949
+  effnet_b1 fold4 adabn_balanced_srkw_rest SRKW-vs-rest P=0.997 R=0.557 F1=0.715 PR-AUC=0.927
+  resnet18  fold0 zeroshot               SRKW-vs-rest P=0.850 R=0.721 F1=0.780 PR-AUC=0.892
+  resnet18  fold0 adabn_train            SRKW-vs-rest P=0.957 R=0.591 F1=0.730 PR-AUC=0.889
+  resnet18  fold0 adabn_balanced         SRKW-vs-rest P=0.997 R=0.539 F1=0.699 PR-AUC=0.925
+  resnet18  fold0 adabn_balanced_srkw_rest SRKW-vs-rest P=0.981 R=0.534 F1=0.691 PR-AUC=0.898
+  resnet18  fold1 zeroshot               SRKW-vs-rest P=0.850 R=0.721 F1=0.780 PR-AUC=0.892
+  resnet18  fold1 adabn_train            SRKW-vs-rest P=0.961 R=0.576 F1=0.720 PR-AUC=0.887
+  resnet18  fold1 adabn_balanced         SRKW-vs-rest P=0.997 R=0.505 F1=0.670 PR-AUC=0.923
+  resnet18  fold1 adabn_balanced_srkw_rest SRKW-vs-rest P=0.997 R=0.523 F1=0.686 PR-AUC=0.896
+  resnet18  fold2 zeroshot               SRKW-vs-rest P=0.850 R=0.721 F1=0.780 PR-AUC=0.892
+  resnet18  fold2 adabn_train            SRKW-vs-rest P=0.963 R=0.572 F1=0.718 PR-AUC=0.887
+  resnet18  fold2 adabn_balanced         SRKW-vs-rest P=0.997 R=0.522 F1=0.685 PR-AUC=0.923
+  resnet18  fold2 adabn_balanced_srkw_rest SRKW-vs-rest P=0.990 R=0.520 F1=0.682 PR-AUC=0.895
+  resnet18  fold3 zeroshot               SRKW-vs-rest P=0.850 R=0.721 F1=0.780 PR-AUC=0.892
+  resnet18  fold3 adabn_train            SRKW-vs-rest P=0.961 R=0.579 F1=0.723 PR-AUC=0.887
+  resnet18  fold3 adabn_balanced         SRKW-vs-rest P=0.994 R=0.581 F1=0.733 PR-AUC=0.928
+  resnet18  fold3 adabn_balanced_srkw_rest SRKW-vs-rest P=0.981 R=0.534 F1=0.691 PR-AUC=0.895
+  resnet18  fold4 zeroshot               SRKW-vs-rest P=0.850 R=0.721 F1=0.780 PR-AUC=0.892
+  resnet18  fold4 adabn_train            SRKW-vs-rest P=0.961 R=0.584 F1=0.727 PR-AUC=0.889
+  resnet18  fold4 adabn_balanced         SRKW-vs-rest P=0.997 R=0.544 F1=0.704 PR-AUC=0.926
+  resnet18  fold4 adabn_balanced_srkw_rest SRKW-vs-rest P=0.982 R=0.539 F1=0.696 PR-AUC=0.899
+
+== limekiln: 108 test clips {'Background': 33, 'HW': 11, 'SRKW': 64, 'TKW': 0}
+  fold0 adaptation sets: adabn_train n=1247 [533, 128, 586, 0], adabn_balanced n=1758 [562, 596, 600, 0], adabn_balanced_srkw_rest n=1172 [476, 110, 586, 0]
+  effnet_b1 fold0 zeroshot               SRKW-vs-rest P=0.965 R=0.859 F1=0.909 PR-AUC=0.929
+  effnet_b1 fold0 adabn_train            SRKW-vs-rest P=0.952 R=0.625 F1=0.755 PR-AUC=0.941
+  effnet_b1 fold0 adabn_balanced         SRKW-vs-rest P=0.953 R=0.641 F1=0.766 PR-AUC=0.944
+  effnet_b1 fold0 adabn_balanced_srkw_rest SRKW-vs-rest P=0.952 R=0.625 F1=0.755 PR-AUC=0.941
+  fold1 adaptation sets: adabn_train n=1177 [516, 123, 538, 0], adabn_balanced n=1614 [543, 550, 521, 0], adabn_balanced_srkw_rest n=1076 [436, 102, 538, 0]
+  effnet_b1 fold1 zeroshot               SRKW-vs-rest P=0.965 R=0.859 F1=0.909 PR-AUC=0.929
+  effnet_b1 fold1 adabn_train            SRKW-vs-rest P=0.951 R=0.609 F1=0.743 PR-AUC=0.942
+  effnet_b1 fold1 adabn_balanced         SRKW-vs-rest P=0.952 R=0.625 F1=0.755 PR-AUC=0.946
+  effnet_b1 fold1 adabn_balanced_srkw_rest SRKW-vs-rest P=0.950 R=0.594 F1=0.731 PR-AUC=0.944
+  fold2 adaptation sets: adabn_train n=1118 [543, 32, 543, 0], adabn_balanced n=1629 [523, 567, 539, 0], adabn_balanced_srkw_rest n=1086 [514, 29, 543, 0]
+  effnet_b1 fold2 zeroshot               SRKW-vs-rest P=0.965 R=0.859 F1=0.909 PR-AUC=0.929
+  effnet_b1 fold2 adabn_train            SRKW-vs-rest P=0.957 R=0.688 F1=0.800 PR-AUC=0.940
+  effnet_b1 fold2 adabn_balanced         SRKW-vs-rest P=0.958 R=0.719 F1=0.821 PR-AUC=0.948
+  effnet_b1 fold2 adabn_balanced_srkw_rest SRKW-vs-rest P=0.957 R=0.688 F1=0.800 PR-AUC=0.942
+  fold3 adaptation sets: adabn_train n=1275 [543, 129, 603, 0], adabn_balanced n=1809 [585, 595, 629, 0], adabn_balanced_srkw_rest n=1206 [485, 118, 603, 0]
+  effnet_b1 fold3 zeroshot               SRKW-vs-rest P=0.965 R=0.859 F1=0.909 PR-AUC=0.929
+  effnet_b1 fold3 adabn_train            SRKW-vs-rest P=0.952 R=0.625 F1=0.755 PR-AUC=0.944
+  effnet_b1 fold3 adabn_balanced         SRKW-vs-rest P=0.953 R=0.641 F1=0.766 PR-AUC=0.947
+  effnet_b1 fold3 adabn_balanced_srkw_rest SRKW-vs-rest P=0.952 R=0.625 F1=0.755 PR-AUC=0.945
+  fold4 adaptation sets: adabn_train n=1191 [573, 104, 514, 0], adabn_balanced n=1542 [481, 522, 539, 0], adabn_balanced_srkw_rest n=1028 [431, 83, 514, 0]
+  effnet_b1 fold4 zeroshot               SRKW-vs-rest P=0.965 R=0.859 F1=0.909 PR-AUC=0.929
+  effnet_b1 fold4 adabn_train            SRKW-vs-rest P=0.952 R=0.625 F1=0.755 PR-AUC=0.942
+  effnet_b1 fold4 adabn_balanced         SRKW-vs-rest P=0.955 R=0.656 F1=0.778 PR-AUC=0.948
+  effnet_b1 fold4 adabn_balanced_srkw_rest SRKW-vs-rest P=0.950 R=0.594 F1=0.731 PR-AUC=0.941
+  resnet18  fold0 zeroshot               SRKW-vs-rest P=0.906 R=0.906 F1=0.906 PR-AUC=0.950
+  resnet18  fold0 adabn_train            SRKW-vs-rest P=0.935 R=0.672 F1=0.782 PR-AUC=0.903
+  resnet18  fold0 adabn_balanced         SRKW-vs-rest P=0.917 R=0.688 F1=0.786 PR-AUC=0.913
+  resnet18  fold0 adabn_balanced_srkw_rest SRKW-vs-rest P=0.935 R=0.672 F1=0.782 PR-AUC=0.904
+  resnet18  fold1 zeroshot               SRKW-vs-rest P=0.906 R=0.906 F1=0.906 PR-AUC=0.950
+  resnet18  fold1 adabn_train            SRKW-vs-rest P=0.935 R=0.672 F1=0.782 PR-AUC=0.902
+  resnet18  fold1 adabn_balanced         SRKW-vs-rest P=0.917 R=0.688 F1=0.786 PR-AUC=0.914
+  resnet18  fold1 adabn_balanced_srkw_rest SRKW-vs-rest P=0.933 R=0.656 F1=0.771 PR-AUC=0.900
+  resnet18  fold2 zeroshot               SRKW-vs-rest P=0.906 R=0.906 F1=0.906 PR-AUC=0.950
+  resnet18  fold2 adabn_train            SRKW-vs-rest P=0.933 R=0.656 F1=0.771 PR-AUC=0.913
+  resnet18  fold2 adabn_balanced         SRKW-vs-rest P=0.961 R=0.766 F1=0.852 PR-AUC=0.932
+  resnet18  fold2 adabn_balanced_srkw_rest SRKW-vs-rest P=0.933 R=0.656 F1=0.771 PR-AUC=0.913
+  resnet18  fold3 zeroshot               SRKW-vs-rest P=0.906 R=0.906 F1=0.906 PR-AUC=0.950
+  resnet18  fold3 adabn_train            SRKW-vs-rest P=0.935 R=0.672 F1=0.782 PR-AUC=0.906
+  resnet18  fold3 adabn_balanced         SRKW-vs-rest P=0.917 R=0.688 F1=0.786 PR-AUC=0.914
+  resnet18  fold3 adabn_balanced_srkw_rest SRKW-vs-rest P=0.935 R=0.672 F1=0.782 PR-AUC=0.905
+  resnet18  fold4 zeroshot               SRKW-vs-rest P=0.906 R=0.906 F1=0.906 PR-AUC=0.950
+  resnet18  fold4 adabn_train            SRKW-vs-rest P=0.917 R=0.688 F1=0.786 PR-AUC=0.905
+  resnet18  fold4 adabn_balanced         SRKW-vs-rest P=0.917 R=0.688 F1=0.786 PR-AUC=0.916
+  resnet18  fold4 adabn_balanced_srkw_rest SRKW-vs-rest P=0.935 R=0.672 F1=0.782 PR-AUC=0.903
+
+== strait_of_georgia: 2606 test clips {'Background': 2124, 'HW': 0, 'SRKW': 360, 'TKW': 122}
+  fold0 adaptation sets: adabn_train n=16121 [12628, 0, 2647, 846], adabn_balanced n=7941 [2639, 0, 2696, 2606], adabn_balanced_srkw_rest n=5294 [2465, 0, 2647, 182]
+  effnet_b1 fold0 zeroshot               SRKW-vs-rest P=0.302 R=0.653 F1=0.413 PR-AUC=0.307
+  effnet_b1 fold0 adabn_train            SRKW-vs-rest P=0.414 R=0.611 F1=0.494 PR-AUC=0.357
+  effnet_b1 fold0 adabn_balanced         SRKW-vs-rest P=0.383 R=0.519 F1=0.441 PR-AUC=0.331
+  effnet_b1 fold0 adabn_balanced_srkw_rest SRKW-vs-rest P=0.404 R=0.489 F1=0.442 PR-AUC=0.330
+  fold1 adaptation sets: adabn_train n=15652 [12155, 0, 2642, 855], adabn_balanced n=7926 [2653, 0, 2655, 2618], adabn_balanced_srkw_rest n=5284 [2462, 0, 2642, 180]
+  effnet_b1 fold1 zeroshot               SRKW-vs-rest P=0.302 R=0.653 F1=0.413 PR-AUC=0.307
+  effnet_b1 fold1 adabn_train            SRKW-vs-rest P=0.387 R=0.631 F1=0.480 PR-AUC=0.344
+  effnet_b1 fold1 adabn_balanced         SRKW-vs-rest P=0.384 R=0.528 F1=0.444 PR-AUC=0.321
+  effnet_b1 fold1 adabn_balanced_srkw_rest SRKW-vs-rest P=0.400 R=0.508 F1=0.448 PR-AUC=0.315
+  fold2 adaptation sets: adabn_train n=15535 [12038, 0, 2661, 836], adabn_balanced n=7983 [2619, 0, 2643, 2721], adabn_balanced_srkw_rest n=5322 [2482, 0, 2661, 179]
+  effnet_b1 fold2 zeroshot               SRKW-vs-rest P=0.302 R=0.653 F1=0.413 PR-AUC=0.307
+  effnet_b1 fold2 adabn_train            SRKW-vs-rest P=0.415 R=0.614 F1=0.495 PR-AUC=0.361
+  effnet_b1 fold2 adabn_balanced         SRKW-vs-rest P=0.382 R=0.525 F1=0.442 PR-AUC=0.331
+  effnet_b1 fold2 adabn_balanced_srkw_rest SRKW-vs-rest P=0.412 R=0.492 F1=0.448 PR-AUC=0.335
+  fold3 adaptation sets: adabn_train n=16345 [12864, 0, 2639, 842], adabn_balanced n=7917 [2581, 0, 2639, 2697], adabn_balanced_srkw_rest n=5278 [2457, 0, 2639, 182]
+  effnet_b1 fold3 zeroshot               SRKW-vs-rest P=0.302 R=0.653 F1=0.413 PR-AUC=0.307
+  effnet_b1 fold3 adabn_train            SRKW-vs-rest P=0.410 R=0.617 F1=0.493 PR-AUC=0.358
+  effnet_b1 fold3 adabn_balanced         SRKW-vs-rest P=0.381 R=0.528 F1=0.442 PR-AUC=0.329
+  effnet_b1 fold3 adabn_balanced_srkw_rest SRKW-vs-rest P=0.407 R=0.497 F1=0.448 PR-AUC=0.328
+  fold4 adaptation sets: adabn_train n=16123 [12627, 0, 2659, 837], adabn_balanced n=7977 [2603, 0, 2718, 2656], adabn_balanced_srkw_rest n=5318 [2479, 0, 2659, 180]
+  effnet_b1 fold4 zeroshot               SRKW-vs-rest P=0.302 R=0.653 F1=0.413 PR-AUC=0.307
+  effnet_b1 fold4 adabn_train            SRKW-vs-rest P=0.414 R=0.614 F1=0.494 PR-AUC=0.359
+  effnet_b1 fold4 adabn_balanced         SRKW-vs-rest P=0.385 R=0.519 F1=0.442 PR-AUC=0.332
+  effnet_b1 fold4 adabn_balanced_srkw_rest SRKW-vs-rest P=0.405 R=0.494 F1=0.445 PR-AUC=0.327
+  resnet18  fold0 zeroshot               SRKW-vs-rest P=0.424 R=0.653 F1=0.514 PR-AUC=0.596
+  resnet18  fold0 adabn_train            SRKW-vs-rest P=0.380 R=0.669 F1=0.485 PR-AUC=0.559
+  resnet18  fold0 adabn_balanced         SRKW-vs-rest P=0.444 R=0.597 F1=0.509 PR-AUC=0.555
+  resnet18  fold0 adabn_balanced_srkw_rest SRKW-vs-rest P=0.466 R=0.525 F1=0.493 PR-AUC=0.506
+  resnet18  fold1 zeroshot               SRKW-vs-rest P=0.424 R=0.653 F1=0.514 PR-AUC=0.596
+  resnet18  fold1 adabn_train            SRKW-vs-rest P=0.364 R=0.650 F1=0.467 PR-AUC=0.534
+  resnet18  fold1 adabn_balanced         SRKW-vs-rest P=0.427 R=0.597 F1=0.498 PR-AUC=0.548
+  resnet18  fold1 adabn_balanced_srkw_rest SRKW-vs-rest P=0.449 R=0.517 F1=0.481 PR-AUC=0.484
+  resnet18  fold2 zeroshot               SRKW-vs-rest P=0.424 R=0.653 F1=0.514 PR-AUC=0.596
+  resnet18  fold2 adabn_train            SRKW-vs-rest P=0.378 R=0.672 F1=0.484 PR-AUC=0.564
+  resnet18  fold2 adabn_balanced         SRKW-vs-rest P=0.445 R=0.597 F1=0.510 PR-AUC=0.555
+  resnet18  fold2 adabn_balanced_srkw_rest SRKW-vs-rest P=0.473 R=0.536 F1=0.503 PR-AUC=0.511
+  resnet18  fold3 zeroshot               SRKW-vs-rest P=0.424 R=0.653 F1=0.514 PR-AUC=0.596
+  resnet18  fold3 adabn_train            SRKW-vs-rest P=0.366 R=0.667 F1=0.473 PR-AUC=0.550
+  resnet18  fold3 adabn_balanced         SRKW-vs-rest P=0.435 R=0.603 F1=0.505 PR-AUC=0.553
+  resnet18  fold3 adabn_balanced_srkw_rest SRKW-vs-rest P=0.459 R=0.525 F1=0.490 PR-AUC=0.502
+  resnet18  fold4 zeroshot               SRKW-vs-rest P=0.424 R=0.653 F1=0.514 PR-AUC=0.596
+  resnet18  fold4 adabn_train            SRKW-vs-rest P=0.373 R=0.669 F1=0.479 PR-AUC=0.561
+  resnet18  fold4 adabn_balanced         SRKW-vs-rest P=0.443 R=0.600 F1=0.509 PR-AUC=0.556
+  resnet18  fold4 adabn_balanced_srkw_rest SRKW-vs-rest P=0.464 R=0.531 F1=0.495 PR-AUC=0.507
+
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/exp3_splits/adabn_exp3_predictions.csv and adabn_exp3_metrics.csv

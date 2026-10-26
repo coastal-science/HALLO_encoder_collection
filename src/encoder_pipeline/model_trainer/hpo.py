@@ -1,8 +1,13 @@
 """Ray Tune hyperparameter search over the classifier / ssamba paradigm, driven by
 model_trainer.tune. Each trial is an MLflow run nested under the trainer run."""
 
+import os
 from pathlib import Path
 from typing import Any, Optional
+
+# bind the local Ray instance to 127.0.0.1 instead of the Wi-Fi DHCP address: a Wi-Fi drop otherwise removes the
+# node IP mid-run, the GCS misses the raylet's heartbeats and the whole search dies. Read when ray is imported.
+os.environ.setdefault("RAY_ENABLE_WINDOWS_OR_OSX_CLUSTER", "0")
 
 import mlflow
 import ray

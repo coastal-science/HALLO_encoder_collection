@@ -16,6 +16,9 @@ class PerchConfig(StrictBaseModel):
 
 
 class EmbeddingsConfig(StrictBaseModel):
+    enabled: bool = True
+    """false = stop after the model_trainer stage, e.g. for SSL pretraining on
+    unlabelled data, where there is nothing to embed / probe."""
     source: Literal["HALLO_encoder_collection", "perch_hoplite"] = "HALLO_encoder_collection"
     """"HALLO_encoder_collection": run_id's model_trainer checkpoint, from
     local disk if present, else downloaded from the MLflow tracking server.

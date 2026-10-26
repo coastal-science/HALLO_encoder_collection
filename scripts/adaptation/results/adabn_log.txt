@@ -1,0 +1,29 @@
+classes ['Background', 'HW', 'SRKW', 'TKW']; skipping held-out ['DORI VENUS (Saanich)'] ([('DORI VENUS (Saanich)', 4)] test clips)
+
+== DORI VENUS (Strait of Georgia): 22550 test clips {'Background': 17702, 'HW': 0, 'SRKW': 3672, 'TKW': 1176}
+  effnet_b1 zeroshot         SRKW-vs-rest P=0.416 R=0.649 F1=0.507 PR-AUC=0.460
+  effnet_b1 adabn_all        SRKW-vs-rest P=0.562 R=0.618 F1=0.589 PR-AUC=0.557
+  effnet_b1 adabn_background SRKW-vs-rest P=0.498 R=0.685 F1=0.576 PR-AUC=0.553
+  resnet18  zeroshot         SRKW-vs-rest P=0.586 R=0.629 F1=0.607 PR-AUC=0.698
+  resnet18  adabn_all        SRKW-vs-rest P=0.472 R=0.654 F1=0.548 PR-AUC=0.637
+  resnet18  adabn_background SRKW-vs-rest P=0.385 R=0.735 F1=0.505 PR-AUC=0.632
+
+== LimeKiln: 1610 test clips {'Background': 710, 'HW': 140, 'SRKW': 760, 'TKW': 0}
+  effnet_b1 zeroshot         SRKW-vs-rest P=0.927 R=0.821 F1=0.871 PR-AUC=0.942
+  effnet_b1 adabn_all        SRKW-vs-rest P=0.942 R=0.657 F1=0.774 PR-AUC=0.925
+  effnet_b1 adabn_background SRKW-vs-rest P=0.794 R=0.836 F1=0.814 PR-AUC=0.892
+  resnet18  zeroshot         SRKW-vs-rest P=0.883 R=0.916 F1=0.899 PR-AUC=0.944
+  resnet18  adabn_all        SRKW-vs-rest P=0.960 R=0.691 F1=0.803 PR-AUC=0.936
+  resnet18  adabn_background SRKW-vs-rest P=0.801 R=0.914 F1=0.854 PR-AUC=0.937
+
+== Tekteksen: 10813 test clips {'Background': 7374, 'HW': 21, 'SRKW': 3418, 'TKW': 0}
+  effnet_b1 zeroshot         SRKW-vs-rest P=0.502 R=0.700 F1=0.585 PR-AUC=0.607
+  effnet_b1 adabn_all        SRKW-vs-rest P=0.903 R=0.568 F1=0.697 PR-AUC=0.829
+  effnet_b1 adabn_background SRKW-vs-rest P=0.728 R=0.775 F1=0.751 PR-AUC=0.802
+  resnet18  zeroshot         SRKW-vs-rest P=0.601 R=0.651 F1=0.625 PR-AUC=0.721
+  resnet18  adabn_all        SRKW-vs-rest P=0.795 R=0.474 F1=0.594 PR-AUC=0.696
+  resnet18  adabn_background SRKW-vs-rest P=0.609 R=0.586 F1=0.597 PR-AUC=0.663
+effnet_b1 zeroshot vs exp_2 logged test predictions: max |prob diff| 1.65e-03, argmax agreement 99.9943%
+resnet18 zeroshot vs exp_2 logged test predictions: max |prob diff| 4.46e-04, argmax agreement 100.0000%
+
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/adabn_predictions.csv and adabn_metrics.csv

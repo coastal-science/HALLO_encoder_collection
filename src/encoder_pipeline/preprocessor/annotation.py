@@ -1,3 +1,4 @@
+import math
 from typing import Optional
 
 import librosa
@@ -28,6 +29,9 @@ class Annotation:
         self.duration: float = 2 * config.time_offset
         file_duration = len(file.audio) / file.sr
         Annotation.check_window(file_duration, config)
+        # a NaN start / duration would otherwise slip through the min / max clamp below as a window at 0 s
+        if math.isnan(time_start) or math.isnan(duration):
+            raise ValueError(f"annotation has no start / duration (time_start={time_start}, duration={duration})")
         # window is centered on the annotation; annotations longer than it are center-cropped
         center = time_start + duration / 2
         self.time_start: float = max(0.0, min(center - config.time_offset, file_duration - self.duration))
