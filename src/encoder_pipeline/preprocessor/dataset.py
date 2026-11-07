@@ -33,7 +33,8 @@ class Dataset:
         hash_params = {
             "spectrogram": self.spec_config.model_dump(),
             "audio_file": self.audio_file_config.model_dump(),
-            "annotation": self.annotation_config.model_dump(),
+            # peak_normalize only enters the hash when set, so files built before it existed keep their hash
+            "annotation": self.annotation_config.model_dump(exclude={"peak_normalize"} if annotation_config.peak_normalize is None else None),
             "annotations_csv": self.dataset_config.annotations_csv,
             "classes_to_drop": self.dataset_config.classes_to_drop,
             "run_name": self.run_name,

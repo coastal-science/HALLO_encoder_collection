@@ -26,6 +26,7 @@ class Annotation:
         self.file = file
         self.label = label
         self.time_offset = config.time_offset
+        self.peak_normalize = config.peak_normalize
         self.duration: float = 2 * config.time_offset
         file_duration = len(file.audio) / file.sr
         Annotation.check_window(file_duration, config)
@@ -48,5 +49,10 @@ class Annotation:
 
     @property
     def audio(self) -> np.ndarray:
-        return self.file.slice(self.time_start, self.duration)
+        audio = self.file.slice(self.time_start, self.duration)
+        if self.peak_normalize is None:
+            return audio
+        audio = audio - audio.mean()
+        peak = np.abs(audio).max()
+        return audio * (self.peak_normalize / peak) if peak > 0 else audio
 

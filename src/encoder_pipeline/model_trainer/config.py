@@ -109,6 +109,29 @@ class SSAMBAClassifierConfig(SSAMBAEncoderConfig):
     Needs the same variant and geometry. Unset = train from scratch."""
 
 
+PerchV2Variant = Literal["perch_v2"]
+
+
+class PerchV2ClassifierConfig(StrictBaseModel):
+    """Perch v2's EfficientNet-B3 (model_trainer/perch_v2.py) as a classifier backbone, initialised from Google's
+    released weights. Perch was trained on its own log-mel spectrogram, so the preprocessor has to approximate it
+    (see configs/perch_v2_finetune/00_base.yaml) and input_scale has to map its units onto Perch's."""
+
+    pretrained_path: str
+    """Weights written by scripts/perch/convert_perch_v2_to_torch.py, e.g.
+    data/model_trainer/pretrained/perch_v2_backbone.pt."""
+    input_layout: Literal["freq_time", "time_freq"] = "freq_time"
+    """Orientation of the spectrograms the loader yields: the preprocessor's are (n_mels, frames) = freq_time."""
+    input_scale: float = 1.0
+    """Multiplies the input before the backbone. Perch's input is 0.1 * ln(mel amplitude), so for the
+    preprocessor's amplitude dB (dynamic 'db', mel.power 1) use 0.1 * ln(10) / 20 = 0.011512925464970229."""
+    drop_path_rate: float = 0.0
+    """Stochastic depth on the residual blocks while training; Perch itself was trained with 0.2."""
+    freeze_batchnorm: bool = False
+    """Keep every BatchNorm in eval mode (Perch's running statistics, no batch statistics) while training; the
+    BatchNorm affine weights still train. Usual for small-data fine-tuning."""
+
+
 class SimCLRConfig(StrictBaseModel):
     """Backbone + Lightly's SimCLR projection head"""
 
@@ -195,6 +218,12 @@ class SSAMBAConfig(SSAMBAEncoderConfig):
     """Mask square clusters of 3-5 patches a side instead of single patches."""
     mse_weight: float = 10.0
     """Loss = InfoNCE + mse_weight * reconstruction MSE."""
+    init_checkpoint: Optional[str] = None
+    """Local path to a fold<n>_best.pt / fold<n>_last.pt written by a prior
+    paradigm 'ssamba' run; its weights (encoder + heads) are loaded before
+    training, to continue pretraining. Optimizer and lr schedule start fresh.
+    Needs the same variant, geometry and mask settings. Unset = train from
+    scratch."""
     epochs: int = 10
     lr: float = 1e-4
     weight_decay: float = 5e-7
@@ -212,14 +241,19 @@ class SSAMBAConfig(SSAMBAEncoderConfig):
     via torch.optim.lr_scheduler.CosineAnnealingLR."""
     lr_scheduler_min_lr: float = 0.0
     """Final lr at the end of cosine annealing; ignored when lr_scheduler is False."""
+    save_every_epoch: bool = False
+    """Also keep fold<n>_epoch<NN>.pt (same bundle as fold<n>_last.pt) after every epoch, in the run's
+    data/model_trainer/<run_id>/ dir (not logged to MLflow), so intermediate checkpoints can be probed."""
 
 
 class ClassifierConfig(StrictBaseModel):
     """Backbone + linear classification head"""
 
-    backbone_name: Union[backbone, SSAMBAVariant] = "resnet18"
+    backbone_name: Union[backbone, SSAMBAVariant, PerchV2Variant] = "resnet18"
     ssamba: Optional[SSAMBAClassifierConfig] = None
     """Required when backbone_name is an ssamba_* variant."""
+    perch_v2: Optional[PerchV2ClassifierConfig] = None
+    """Required when backbone_name is perch_v2."""
     init_checkpoint: Optional[str] = None
     """Local path to a fold<n>_best.pt / fold<n>_last.pt written by a prior
     classifier run; its weights (backbone + head) are loaded before training,

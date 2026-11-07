@@ -128,6 +128,12 @@ def generate_embeddings(
         )
         clip_frames = _perch_clip_frames(dataloaders)
         checkpoint_desc = f"perch_hoplite:{config.perch.preset}"
+    elif config.checkpoint_path is not None:
+        frozen_checkpoint = Path(config.checkpoint_path)
+        if not frozen_checkpoint.exists():
+            raise FileNotFoundError(f"embeddings.checkpoint_path {frozen_checkpoint} does not exist")
+        checkpoint_desc = str(frozen_checkpoint.resolve())
+        frozen_source = HALLOEmbeddingModel(checkpoint_desc)  # the same frozen encoder for every fold
     else:
         checkpoint_dir = download_artifact(data_dir, config.checkpoint_mlflow_id or run_id)
 
@@ -145,10 +151,13 @@ def generate_embeddings(
                     embeddings[split] = (split_embeddings, split_labels)
                     uids[split] = clips["uid"].to_numpy()[kept]
             else:
-                best_path = checkpoint_dir / f"fold{fold}_best.pt"
-                checkpoint_path = best_path if best_path.exists() else checkpoint_dir / f"fold{fold}_last.pt"
-                checkpoint_desc = str(checkpoint_path)
-                source = HALLOEmbeddingModel(str(checkpoint_path))
+                if config.checkpoint_path is not None:
+                    source = frozen_source
+                else:
+                    best_path = checkpoint_dir / f"fold{fold}_best.pt"
+                    checkpoint_path = best_path if best_path.exists() else checkpoint_dir / f"fold{fold}_last.pt"
+                    checkpoint_desc = str(checkpoint_path)
+                    source = HALLOEmbeddingModel(str(checkpoint_path))
                 all_uids = load_uids(next(iter(loaders.values())).dataset.dataset.hdf5_path)
                 for split, loader in loaders.items():
                     # ordered, so every embedding row can be traced back to its uid

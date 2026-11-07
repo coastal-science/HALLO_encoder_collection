@@ -16,6 +16,10 @@ class AnnotationConfig(StrictBaseModel):
     time_offset: float = 2.5
     """Half-width, in seconds, of the padded window kept around the
     annotation's center."""
+    peak_normalize: Optional[float] = None
+    """If set, each window's audio has its mean removed and is scaled so its absolute peak equals this value, before
+    the spectrogram (perch_hoplite's normalize_audio; Perch v2 expects 0.25). None leaves the audio as loaded. Only
+    enters the output hash when set, so existing files keep their hash."""
 
 
 class STFTConfig(StrictBaseModel):

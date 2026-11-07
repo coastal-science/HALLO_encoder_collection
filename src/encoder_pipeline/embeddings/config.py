@@ -34,6 +34,11 @@ class EmbeddingsConfig(StrictBaseModel):
     """run_id whose model_trainer checkpoint embeds this config's own
     preprocessor dataset, logged under a new untrained run. null = run_id's
     own checkpoint."""
+    checkpoint_path: Optional[str] = None
+    """A single model_trainer checkpoint file (e.g. a pretraining run's
+    fold0_best.pt) whose frozen backbone embeds EVERY fold of this config's own
+    preprocessor dataset, logged under a new untrained run -- a frozen-encoder
+    probe. Takes precedence over checkpoint_mlflow_id. null = per-fold checkpoints."""
     reuse_embeddings_path: Optional[str] = None
     """A prior run's data_dir/embeddings/<run_id>/fold<n>.h5. Skips every other
     stage and only reruns the linear probe on it, as a new nested run under <run_id>."""

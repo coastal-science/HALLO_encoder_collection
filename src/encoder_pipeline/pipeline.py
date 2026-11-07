@@ -35,7 +35,8 @@ def run_pipeline(config: PipelineConfig) -> None:
         return
 
     is_perch = config.embeddings.source == "perch_hoplite"
-    if config.embeddings.mlflow_id is None and (is_perch or config.embeddings.checkpoint_mlflow_id):
+    is_frozen_checkpoint = config.embeddings.checkpoint_path is not None or config.embeddings.checkpoint_mlflow_id
+    if config.embeddings.mlflow_id is None and (is_perch or is_frozen_checkpoint):
         dataset_path = run_preprocessor(config.preprocessor, config.data_dir, metadata_only=is_perch)
         run_id, dataloaders = open_untrained_run(config, dataset_path)
     elif config.embeddings.mlflow_id is None:

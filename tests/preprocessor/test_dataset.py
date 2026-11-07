@@ -103,3 +103,17 @@ def test_save_sample_images_skips_metadata_only_datasets(tmp_path):
     config = PreprocessorConfig(dataset=DatasetConfig(annotations_csv="unused.csv"))
 
     assert save_sample_images(str(tmp_path / "d.h5"), config, tmp_path / "samples", n_per_class=3) == []
+
+
+def test_unset_peak_normalize_keeps_the_hash(tmp_path):
+    csv = _write_csv(tmp_path / "a.csv", ["HW", "SRKW"])
+    plain = _dataset(csv, tmp_path)
+    # the hash a file built before peak_normalize existed was stored under
+    import hashlib, json
+    old = {"spectrogram": SpectrogramConfig().model_dump(), "audio_file": AudioFileConfig().model_dump(),
+           "annotation": {"time_offset": AnnotationConfig().time_offset}, "annotations_csv": csv,
+           "classes_to_drop": None, "run_name": None}
+    assert plain.content_hash == hashlib.sha256(json.dumps(old, sort_keys=True, default=str).encode()).hexdigest()[:16]
+    normalized = Dataset(SpectrogramConfig(), AudioFileConfig(), AnnotationConfig(peak_normalize=0.25),
+                         DatasetConfig(annotations_csv=csv), data_dir=str(tmp_path))
+    assert normalized.content_hash != plain.content_hash

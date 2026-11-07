@@ -50,6 +50,7 @@ class Trainer(ABC):
     eval_every: Optional[int] = None
     early_stopping_patience: Optional[int] = None
     scheduler: Optional[torch.optim.lr_scheduler.LRScheduler] = None
+    save_every_epoch: bool = False
 
     def _autocast(self) -> torch.autocast:
         """bf16 autocast on self.device when self.amp is set, else a no-op."""
@@ -92,6 +93,9 @@ class Trainer(ABC):
                     best_val_loss = val_loss
                     best_epoch = epoch
                     torch.save({"model": self.model, "spectrogram_config": spectrogram_config}, best_path)
+            if self.save_every_epoch:
+                torch.save({"model": self.model, "spectrogram_config": spectrogram_config},
+                           out_dir / f"fold{fold}_epoch{epoch:02d}.pt")
             if self._should_stop(epoch, best_epoch):
                 last_epoch = epoch
                 mlflow.log_metric(f"fold{fold}_stopped_epoch", epoch)
@@ -262,7 +266,11 @@ class SSAMBATrainer(Trainer):
         self.device = torch.device(config.device)
         self.epochs = config.epochs
         self.mse_weight = config.mse_weight
+        self.save_every_epoch = config.save_every_epoch
         self.model = SSAMBAModel(config).to(self.device)
+        if config.init_checkpoint is not None:
+            bundle = torch.load(config.init_checkpoint, map_location=self.device, weights_only=False)
+            self.model.load_state_dict(bundle["model"].state_dict())
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay, betas=(0.95, 0.999),
         )

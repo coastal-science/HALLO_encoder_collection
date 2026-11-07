@@ -9,6 +9,7 @@ from lightly.models.utils import deactivate_requires_grad
 from encoder_pipeline.model_trainer.config import (
     ClassifierConfig, EfficientNetVariant, MoCoConfig, MoCoV3Config, ResNetVariant, SimCLRConfig, backbone,
 )
+from encoder_pipeline.model_trainer.perch_v2 import PerchV2Backbone, load_perch_v2_backbone
 from encoder_pipeline.model_trainer.ssamba import SSAMBABackbone
 
 
@@ -126,11 +127,22 @@ def build_ssamba_backbone(config: ClassifierConfig) -> SSAMBABackbone:
     return ssamba_backbone
 
 
+def build_perch_v2_backbone(config: ClassifierConfig) -> PerchV2Backbone:
+    """Perch v2's EfficientNet-B3 with Google's weights (converted by scripts/perch/convert_perch_v2_to_torch.py)."""
+    assert config.perch_v2 is not None, "model_trainer.classifier.perch_v2 is required for backbone_name perch_v2"
+    perch = config.perch_v2
+    return load_perch_v2_backbone(perch.pretrained_path, input_layout=perch.input_layout,
+                                  drop_path_rate=perch.drop_path_rate, input_scale=perch.input_scale,
+                                  freeze_batchnorm=perch.freeze_batchnorm)
+
+
 class ClassifierModel(nn.Module):
     def __init__(self, config: ClassifierConfig, num_classes: int) -> None:
         super().__init__()
         if config.backbone_name.startswith("ssamba"):
             self.backbone = build_ssamba_backbone(config)
+        elif config.backbone_name == "perch_v2":
+            self.backbone = build_perch_v2_backbone(config)
         else:
             self.backbone = build_backbone(config.backbone_name)
         self.classifier = nn.Linear(self.backbone.out_features, num_classes)

@@ -109,11 +109,16 @@ class PerchEmbeddingModel(EmbeddingModel):
         return embeddings[codes[keep]], clips["label"].to_numpy()[keep].astype(np.int64), keep
 
     def _embed(self, waveforms: list[np.ndarray]) -> np.ndarray:
-        """Mean-pooled embeddings for equal-length waveforms, batch_size at a time."""
+        """Mean-pooled embeddings for equal-length waveforms, batch_size at a time. A short last batch is
+        zero-padded to batch_size (padding rows dropped): every new batch shape is another XLA compile +
+        autotune on GPU, and those piled up until TF ran out of GPU memory."""
         embeddings = []
         for start in range(0, len(waveforms), self.batch_size):
-            out = self.model.batch_embed(np.stack(waveforms[start:start + self.batch_size]))
-            embeddings.append(np.asarray(out.pooled_embeddings("mean", "mean")))
+            batch = np.stack(waveforms[start:start + self.batch_size])
+            n = len(batch)
+            batch = np.pad(batch, ((0, self.batch_size - n), (0, 0)))
+            out = self.model.batch_embed(batch)
+            embeddings.append(np.asarray(out.pooled_embeddings("mean", "mean"))[:n])
         return np.concatenate(embeddings)
 
     def _safe_load(self, path: str, begin_sec: float, duration: float):
@@ -122,3 +127,4 @@ class PerchEmbeddingModel(EmbeddingModel):
         except Exception as e:  # soundfile/librosa raise a range of errors on bad files
             logger.error("perch: failed to load {} @ {}s: {}", path, begin_sec, e)
             return None
+
