@@ -1,0 +1,30 @@
+sequence shard 1/4: 395 files, 395 to do
+/home/noah/hallo-tuned-detectors/.venv/lib/python3.10/site-packages/keras/optimizer_v2/adam.py:105: UserWarning: The `lr` argument is deprecated, use `learning_rate` instead.
+  super(Adam, self).__init__(name, **kwargs)
+Traceback (most recent call last):
+  File "/home/noah/hallo-tuned-detectors/.venv/lib/python3.10/site-packages/ketos/neural_networks/dev_utils/nn_interface.py", line 791, in load
+    os.makedirs(new_model_folder)
+  File "/home/noah/.local/share/uv/python/cpython-3.10-linux-x86_64-gnu/lib/python3.10/os.py", line 225, in makedirs
+    mkdir(name, mode)
+FileExistsError: [Errno 17] File exists: 'kt-tmp'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/noah/HALLO_encoder_collection/scripts/adaptation/score_file_level.py", line 176, in <module>
+    main()
+  File "/home/noah/HALLO_encoder_collection/scripts/adaptation/score_file_level.py", line 157, in main
+    model = DETECTORS[args.detector]()
+  File "/home/noah/HALLO_encoder_collection/scripts/adaptation/score_file_level.py", line 72, in __init__
+    self.m = detector.load_model(DETECTORS_REPO / SEQUENCE["model"])
+  File "/home/noah/hallo-tuned-detectors/src/backends/sequence/detector.py", line 92, in load_model
+    _model = SeqInterface.load(str(resolved))
+  File "/home/noah/hallo-tuned-detectors/.venv/lib/python3.10/site-packages/ketos/neural_networks/dev_utils/nn_interface.py", line 795, in load
+    rmtree(new_model_folder)
+  File "/home/noah/.local/share/uv/python/cpython-3.10-linux-x86_64-gnu/lib/python3.10/shutil.py", line 725, in rmtree
+    _rmtree_safe_fd(fd, path, onerror)
+  File "/home/noah/.local/share/uv/python/cpython-3.10-linux-x86_64-gnu/lib/python3.10/shutil.py", line 681, in _rmtree_safe_fd
+    onerror(os.unlink, fullname, sys.exc_info())
+  File "/home/noah/.local/share/uv/python/cpython-3.10-linux-x86_64-gnu/lib/python3.10/shutil.py", line 679, in _rmtree_safe_fd
+    os.unlink(entry.name, dir_fd=topfd)
+FileNotFoundError: [Errno 2] No such file or directory: 'recipe.json'

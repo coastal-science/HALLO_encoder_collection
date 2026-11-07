@@ -1,0 +1,23 @@
+SCORING DONE status=0 Thu Nov  5 04:33:03 PM AST 2026
+==> scripts/adaptation/results/tuned_detectors/birdnet_strait_of_georgia_log.txt <==
+🏃 View run score_birdnet_strait_of_georgia at: http://localhost:5000/#/experiments/9/runs/8c47edcb52644fd29cbcbe44be8573d5
+🧪 View experiment at: http://localhost:5000/#/experiments/9
+logged MLflow run score_birdnet_strait_of_georgia to experiment hallo_tuned_detectors_comparison
+
+==> scripts/adaptation/results/tuned_detectors/hallo_v1_strait_of_georgia_log.txt <==
+🏃 View run score_hallo_v1_strait_of_georgia at: http://localhost:5000/#/experiments/9/runs/941634920bcb403686c304e5b0372ff8
+🧪 View experiment at: http://localhost:5000/#/experiments/9
+logged MLflow run score_hallo_v1_strait_of_georgia to experiment hallo_tuned_detectors_comparison
+
+==> scripts/adaptation/results/tuned_detectors/sequence_strait_of_georgia_log.txt <==
+🏃 View run score_sequence_strait_of_georgia at: http://localhost:5000/#/experiments/9/runs/b4eac2d61a6c4e2c811e2b113b554bb4
+🧪 View experiment at: http://localhost:5000/#/experiments/9
+logged MLflow run score_sequence_strait_of_georgia to experiment hallo_tuned_detectors_comparison
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/summary_strait_of_georgia.md
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/dots_srkw_strait_of_georgia.png (+ .pdf)
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/dots_kw_strait_of_georgia.png (+ .pdf)
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/pr_curves_strait_of_georgia.png (+ .pdf)
+🏃 View run compare_strait_of_georgia at: http://localhost:5000/#/experiments/9/runs/f69a5507a9a6487da4c530236911881d
+🧪 View experiment at: http://localhost:5000/#/experiments/9
+logged MLflow run compare_strait_of_georgia to experiment hallo_tuned_detectors_comparison (308 metrics)
+ALL DONE Thu Nov  5 04:33:32 PM AST 2026

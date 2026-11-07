@@ -1,0 +1,7 @@
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/summary_strait_of_georgia.md
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/dots_srkw_strait_of_georgia.png (+ .pdf)
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/dots_kw_strait_of_georgia.png (+ .pdf)
+wrote /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/pr_curves_strait_of_georgia.png (+ .pdf)
+🏃 View run compare_strait_of_georgia at: http://localhost:5000/#/experiments/9/runs/f69a5507a9a6487da4c530236911881d
+🧪 View experiment at: http://localhost:5000/#/experiments/9
+logged MLflow run compare_strait_of_georgia to experiment hallo_tuned_detectors_comparison (308 metrics)

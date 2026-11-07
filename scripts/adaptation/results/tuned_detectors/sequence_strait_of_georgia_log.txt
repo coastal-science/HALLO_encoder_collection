@@ -1,0 +1,55 @@
+/home/noah/hallo-tuned-detectors/.venv/lib/python3.10/site-packages/keras/optimizer_v2/adam.py:105: UserWarning: The `lr` argument is deprecated, use `learning_rate` instead.
+  super(Adam, self).__init__(name, **kwargs)
+sequence / strait_of_georgia: 22379 clips in 4788 files -> /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/sequence_strait_of_georgia.csv
+  100/4788 files, 338 s
+  200/4788 files, 711 s
+  300/4788 files, 1068 s
+  400/4788 files, 1418 s
+  500/4788 files, 1748 s
+  600/4788 files, 2101 s
+  700/4788 files, 2437 s
+  800/4788 files, 2773 s
+  900/4788 files, 3080 s
+  1000/4788 files, 3422 s
+  1100/4788 files, 3729 s
+  1200/4788 files, 4074 s
+  1300/4788 files, 4380 s
+  1400/4788 files, 4723 s
+  1500/4788 files, 5030 s
+  1600/4788 files, 5374 s
+  1700/4788 files, 5683 s
+  1800/4788 files, 6025 s
+  1900/4788 files, 6334 s
+  2000/4788 files, 6676 s
+  2100/4788 files, 6984 s
+  2200/4788 files, 7338 s
+  2300/4788 files, 7824 s
+  2400/4788 files, 8108 s
+  2500/4788 files, 8396 s
+  2600/4788 files, 8683 s
+  2700/4788 files, 8971 s
+  2800/4788 files, 9261 s
+  2900/4788 files, 9548 s
+  3000/4788 files, 9839 s
+  3100/4788 files, 10129 s
+  3200/4788 files, 10413 s
+  3300/4788 files, 10697 s
+  3400/4788 files, 11019 s
+  3500/4788 files, 11330 s
+  3600/4788 files, 11644 s
+  3700/4788 files, 11934 s
+  3800/4788 files, 12244 s
+  3900/4788 files, 12553 s
+  4000/4788 files, 12851 s
+  4100/4788 files, 13148 s
+  4200/4788 files, 13451 s
+  4300/4788 files, 13754 s
+  4400/4788 files, 14066 s
+  4500/4788 files, 14378 s
+  4600/4788 files, 14699 s
+  4700/4788 files, 14976 s
+  4788/4788 files, 15222 s
+wrote 22379 clips (0 unscored) to /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/sequence_strait_of_georgia.csv; 0 files failed
+🏃 View run score_sequence_strait_of_georgia at: http://localhost:5000/#/experiments/9/runs/b4eac2d61a6c4e2c811e2b113b554bb4
+🧪 View experiment at: http://localhost:5000/#/experiments/9
+logged MLflow run score_sequence_strait_of_georgia to experiment hallo_tuned_detectors_comparison

@@ -1,0 +1,7 @@
+metric,site,method,mean_gap,ci_low,ci_high,n_folds
+PR-AUC,Strait of Georgia,ssamba_C_ssl_all,-0.142,-0.328,0.044,5
+PR-AUC,LimeKiln,ssamba_C_ssl_all,-0.029,-0.047,-0.01,5
+PR-AUC,Tekteksen,ssamba_C_ssl_all,-0.001,-0.004,0.001,5
+"F1, val-tuned threshold",Strait of Georgia,ssamba_C_ssl_all,-0.154,-0.224,-0.085,5
+"F1, val-tuned threshold",LimeKiln,ssamba_C_ssl_all,-0.06,-0.107,-0.014,5
+"F1, val-tuned threshold",Tekteksen,ssamba_C_ssl_all,0.003,-0.014,0.02,5

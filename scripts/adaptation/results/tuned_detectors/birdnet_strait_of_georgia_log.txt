@@ -1,0 +1,54 @@
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+birdnet / strait_of_georgia: 22379 clips in 4788 files -> /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/birdnet_strait_of_georgia.csv
+  100/4788 files, 34 s
+  200/4788 files, 71 s
+  300/4788 files, 108 s
+  400/4788 files, 144 s
+  500/4788 files, 180 s
+  600/4788 files, 216 s
+  700/4788 files, 253 s
+  800/4788 files, 291 s
+  900/4788 files, 329 s
+  1000/4788 files, 367 s
+  1100/4788 files, 408 s
+  1200/4788 files, 451 s
+  1300/4788 files, 489 s
+  1400/4788 files, 528 s
+  1500/4788 files, 567 s
+  1600/4788 files, 605 s
+  1700/4788 files, 642 s
+  1800/4788 files, 681 s
+  1900/4788 files, 719 s
+  2000/4788 files, 757 s
+  2100/4788 files, 794 s
+  2200/4788 files, 833 s
+  2300/4788 files, 871 s
+  2400/4788 files, 909 s
+  2500/4788 files, 946 s
+  2600/4788 files, 984 s
+  2700/4788 files, 1022 s
+  2800/4788 files, 1072 s
+  2900/4788 files, 1114 s
+  3000/4788 files, 1154 s
+  3100/4788 files, 1192 s
+  3200/4788 files, 1224 s
+  3300/4788 files, 1257 s
+  3400/4788 files, 1319 s
+  3500/4788 files, 1382 s
+  3600/4788 files, 1443 s
+  3700/4788 files, 1479 s
+  3800/4788 files, 1531 s
+  3900/4788 files, 1586 s
+  4000/4788 files, 1624 s
+  4100/4788 files, 1664 s
+  4200/4788 files, 1717 s
+  4300/4788 files, 1773 s
+  4400/4788 files, 1833 s
+  4500/4788 files, 1885 s
+  4600/4788 files, 1939 s
+  4700/4788 files, 2156 s
+  4788/4788 files, 2439 s
+wrote 22379 clips (0 unscored) to /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/birdnet_strait_of_georgia.csv; 0 files failed
+🏃 View run score_birdnet_strait_of_georgia at: http://localhost:5000/#/experiments/9/runs/8c47edcb52644fd29cbcbe44be8573d5
+🧪 View experiment at: http://localhost:5000/#/experiments/9
+logged MLflow run score_birdnet_strait_of_georgia to experiment hallo_tuned_detectors_comparison

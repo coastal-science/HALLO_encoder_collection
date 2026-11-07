@@ -1,0 +1,53 @@
+hallo_v1 / strait_of_georgia: 22379 clips in 4788 files -> /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/hallo_v1_strait_of_georgia.csv
+  100/4788 files, 21 s
+  200/4788 files, 41 s
+  300/4788 files, 62 s
+  400/4788 files, 82 s
+  500/4788 files, 102 s
+  600/4788 files, 122 s
+  700/4788 files, 142 s
+  800/4788 files, 163 s
+  900/4788 files, 183 s
+  1000/4788 files, 204 s
+  1100/4788 files, 225 s
+  1200/4788 files, 245 s
+  1300/4788 files, 265 s
+  1400/4788 files, 286 s
+  1500/4788 files, 306 s
+  1600/4788 files, 326 s
+  1700/4788 files, 347 s
+  1800/4788 files, 367 s
+  1900/4788 files, 388 s
+  2000/4788 files, 414 s
+  2100/4788 files, 437 s
+  2200/4788 files, 459 s
+  2300/4788 files, 481 s
+  2400/4788 files, 502 s
+  2500/4788 files, 524 s
+  2600/4788 files, 544 s
+  2700/4788 files, 566 s
+  2800/4788 files, 594 s
+  2900/4788 files, 615 s
+  3000/4788 files, 634 s
+  3100/4788 files, 655 s
+  3200/4788 files, 671 s
+  3300/4788 files, 689 s
+  3400/4788 files, 727 s
+  3500/4788 files, 765 s
+  3600/4788 files, 803 s
+  3700/4788 files, 822 s
+  3800/4788 files, 857 s
+  3900/4788 files, 892 s
+  4000/4788 files, 915 s
+  4100/4788 files, 939 s
+  4200/4788 files, 973 s
+  4300/4788 files, 1009 s
+  4400/4788 files, 1044 s
+  4500/4788 files, 1081 s
+  4600/4788 files, 1124 s
+  4700/4788 files, 1171 s
+  4788/4788 files, 1221 s
+wrote 22379 clips (0 unscored) to /home/noah/HALLO_encoder_collection/scripts/adaptation/results/tuned_detectors/hallo_v1_strait_of_georgia.csv; 0 files failed
+🏃 View run score_hallo_v1_strait_of_georgia at: http://localhost:5000/#/experiments/9/runs/941634920bcb403686c304e5b0372ff8
+🧪 View experiment at: http://localhost:5000/#/experiments/9
+logged MLflow run score_hallo_v1_strait_of_georgia to experiment hallo_tuned_detectors_comparison
