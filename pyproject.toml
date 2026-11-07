@@ -23,6 +23,9 @@ dependencies = [
   "ray[tune]>=2.43,<3"
 ]
 
+[project.optional-dependencies]
+whisper = ["transformers==4.57.1"]
+
 [project.scripts]
 run-preprocessor = "encoder_pipeline.preprocessor.runner:main"
 run-model-trainer = "encoder_pipeline.model_trainer.runner:main"

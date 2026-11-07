@@ -34,7 +34,7 @@ def run_pipeline(config: PipelineConfig) -> None:
         rerun_linear_probe(config.embeddings, config.model_trainer.dataloader.class_label_map)
         return
 
-    is_perch = config.embeddings.source == "perch_hoplite"
+    is_perch = config.embeddings.source in ("perch_hoplite", "whisper")  # raw-audio sources: metadata-only hdf5, no training
     is_frozen_checkpoint = config.embeddings.checkpoint_path is not None or config.embeddings.checkpoint_mlflow_id
     if config.embeddings.mlflow_id is None and (is_perch or is_frozen_checkpoint):
         dataset_path = run_preprocessor(config.preprocessor, config.data_dir, metadata_only=is_perch)

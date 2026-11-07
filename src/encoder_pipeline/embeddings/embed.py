@@ -128,3 +128,74 @@ class PerchEmbeddingModel(EmbeddingModel):
             logger.error("perch: failed to load {} @ {}s: {}", path, begin_sec, e)
             return None
 
+
+class WhisperEmbeddingModel(PerchEmbeddingModel):
+    """Embeddings from a frozen OpenAI Whisper encoder (Hugging Face transformers). Same raw-audio path as
+    PerchEmbeddingModel (window_s clips centered on each annotation, resampled, repeated clips embedded once), at
+    Whisper's 16 kHz, so content above 8 kHz never reaches the model.
+
+    Whisper's encoder is built for 30 s (3000 frames -> 1500 positions) and transformers refuses any other length;
+    a window_s clip gives window_s * 100 frames, so the sinusoidal-initialised (learned) positional table is cut to
+    its first window_s * 50 rows -- the usual way of running Whisper on short clips. Features come from Whisper's
+    own feature extractor (log10 mel, clamped to max - 8, (x + 4) / 4), padded / cut to exactly window_s."""
+
+    def __init__(
+        self, model_name: str = "openai/whisper-base", window_s: float = 5.0, layer: int | None = None,
+        peak_normalize: float | None = 0.25, batch_size: int = 64, load_workers: int = 8, chunk_size: int = 4096,
+        amp: bool = True,
+    ) -> None:
+        try:
+            from transformers import WhisperFeatureExtractor, WhisperModel
+        except ImportError as e:
+            raise ImportError("transformers is not installed -- `pip install 'hallo-encoder-collection[whisper]'`") from e
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.feature_extractor = WhisperFeatureExtractor.from_pretrained(model_name)
+        self.sample_rate = int(self.feature_extractor.sampling_rate)
+        self.window_s = window_s
+        self.n_samples = int(round(window_s * self.sample_rate))
+        n_frames = self.n_samples // self.feature_extractor.hop_length
+        encoder = WhisperModel.from_pretrained(model_name).get_encoder()
+        n_positions = n_frames // (encoder.conv1.stride[0] * encoder.conv2.stride[0])
+        if not 0 < n_positions <= encoder.config.max_source_positions or n_positions * 2 != n_frames:
+            raise ValueError(f"window_s {window_s} gives {n_frames} frames; need an even count up to 3000 (<= 30 s)")
+        positions = encoder.embed_positions.weight.data[:n_positions].clone()
+        encoder.embed_positions = torch.nn.Embedding(n_positions, positions.shape[1])
+        encoder.embed_positions.weight.data.copy_(positions)
+        encoder.config.max_source_positions = n_positions
+        self.n_frames = n_frames
+        self.encoder = encoder.to(self.device).eval()
+        n_states = encoder.config.encoder_layers + 1
+        if layer is not None and not -n_states <= layer < n_states:
+            raise ValueError(f"layer {layer} out of range for {model_name}'s {n_states} hidden states")
+        self.layer = layer
+        self.peak_normalize = peak_normalize
+        self.amp = amp and self.device.type == "cuda"
+        self.embedding_dim = int(encoder.config.d_model)
+        self.batch_size = batch_size
+        self.load_workers = load_workers
+        self.chunk_size = chunk_size
+        logger.info("whisper: {} encoder, {} s -> {} frames -> {} positions, layer {}, {}-d",
+                    model_name, window_s, n_frames, n_positions, "final" if layer is None else layer,
+                    self.embedding_dim)
+
+    def _features(self, batch: np.ndarray) -> torch.Tensor:
+        if self.peak_normalize is not None:
+            batch = batch - batch.mean(axis=1, keepdims=True)
+            peak = np.abs(batch).max(axis=1, keepdims=True)
+            batch = np.where(peak > 0, batch * (self.peak_normalize / np.maximum(peak, 1e-12)), batch)
+        features = self.feature_extractor(
+            list(batch), sampling_rate=self.sample_rate, return_tensors="pt", padding="max_length",
+            max_length=self.n_samples, truncation=True, device=self.device.type,
+        ).input_features
+        return features[..., : self.n_frames].to(self.device)
+
+    @torch.no_grad()
+    def _embed(self, waveforms: list[np.ndarray]) -> np.ndarray:
+        embeddings = []
+        for start in range(0, len(waveforms), self.batch_size):
+            features = self._features(np.stack(waveforms[start:start + self.batch_size]))
+            with torch.autocast(self.device.type, dtype=torch.bfloat16, enabled=self.amp):
+                out = self.encoder(features, output_hidden_states=self.layer is not None)
+            hidden = out.last_hidden_state if self.layer is None else out.hidden_states[self.layer]
+            embeddings.append(hidden.float().mean(dim=1).cpu().numpy())
+        return np.concatenate(embeddings)

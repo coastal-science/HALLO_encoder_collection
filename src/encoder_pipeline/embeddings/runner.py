@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from encoder_pipeline.common.config_utils import load_pipeline_config
 from encoder_pipeline.common.mlflow_utils import configure_mlflow, flatten_params, download_artifact
 from encoder_pipeline.embeddings.config import EmbeddingsConfig
-from encoder_pipeline.embeddings.embed import HALLOEmbeddingModel, PerchEmbeddingModel
+from encoder_pipeline.embeddings.embed import HALLOEmbeddingModel, PerchEmbeddingModel, WhisperEmbeddingModel
 from encoder_pipeline.evaluation.linear_probe import LinearProbe, remap_labels
 from encoder_pipeline.evaluation.predictions import predictions_frame
 from encoder_pipeline.model_trainer.data_loader import (
@@ -121,13 +121,18 @@ def generate_embeddings(
     out_dir = Path(f"{data_dir}/embeddings/{run_id}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    is_perch = config.source == "perch_hoplite"
-    if is_perch:
+    is_perch = config.source in ("perch_hoplite", "whisper")  # raw-audio sources: re-read clips, skip the spectrograms
+    if config.source == "perch_hoplite":
         perch_model = PerchEmbeddingModel(
             config.perch.preset, config.perch.batch_size, config.perch.load_workers, config.perch.chunk_size
         )
-        clip_frames = _perch_clip_frames(dataloaders)
         checkpoint_desc = f"perch_hoplite:{config.perch.preset}"
+    elif config.source == "whisper":
+        perch_model = WhisperEmbeddingModel(**config.whisper.model_dump())
+        layer = "final" if config.whisper.layer is None else f"layer{config.whisper.layer}"
+        checkpoint_desc = f"whisper:{config.whisper.model_name}:{layer}"
+    if is_perch:
+        clip_frames = _perch_clip_frames(dataloaders)
     elif config.checkpoint_path is not None:
         frozen_checkpoint = Path(config.checkpoint_path)
         if not frozen_checkpoint.exists():
