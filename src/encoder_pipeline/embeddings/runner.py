@@ -95,6 +95,14 @@ def _log_linear_probe(
     if frames:
         pd.concat(frames).to_csv(predictions_path, index=False)
         mlflow.log_artifact(str(predictions_path))
+    if config.linear_probe_save:
+        import torch
+        probe_path = predictions_path.with_name(predictions_path.name.replace("_predictions.csv", ".pt"))
+        layer = linear_probe.model
+        torch.save({"state_dict": {k: v.cpu() for k, v in layer.state_dict().items()}, "classes": class_names,
+                    "embedding_dim": layer.in_features, "source": config.source,
+                    "preset": config.perch.preset if config.source == "perch_hoplite" else None}, probe_path)
+        mlflow.log_artifact(str(probe_path))
 
 
 def rerun_linear_probe(config: EmbeddingsConfig, class_label_map: dict[str, str] | None = None) -> None:

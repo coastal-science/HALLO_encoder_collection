@@ -94,19 +94,12 @@ def test_converted_checkpoint_loads():
     assert emb.shape == (1, EMBEDDING_DIM) and torch.isfinite(emb).all()
 
 
-def test_input_scale_and_freeze_batchnorm():
-    torch.manual_seed(0)
-    plain, scaled = PerchV2Backbone().eval(), PerchV2Backbone(input_scale=0.5).eval()
-    scaled.load_state_dict(plain.state_dict())
-    x = torch.randn(2, 1, 128, 120)
-    with torch.no_grad():
-        assert torch.allclose(scaled(x), plain(x * 0.5), atol=1e-6)
-
+def test_freeze_batchnorm():
     frozen = PerchV2Backbone(freeze_batchnorm=True).train()
     bns = [m for m in frozen.modules() if isinstance(m, torch.nn.BatchNorm2d)]
     assert frozen.training and all(not m.training for m in bns)
     before = bns[0].running_mean.clone()
-    frozen(x).sum().backward()
+    frozen(torch.randn(2, 1, 128, 120)).sum().backward()
     assert torch.equal(bns[0].running_mean, before) and bns[0].weight.grad is not None
 
 
@@ -118,10 +111,10 @@ def test_classifier_config_builds_perch_v2(tmp_path):
     ckpt = tmp_path / "perch_v2_backbone.pt"
     torch.save({"state_dict": source.state_dict(), "meta": {}}, ckpt)
     config = ClassifierConfig.model_validate({"backbone_name": "perch_v2", "device": "cpu", "perch_v2": {
-        "pretrained_path": str(ckpt), "input_scale": 0.25, "freeze_batchnorm": True}})
+        "pretrained_path": str(ckpt), "freeze_batchnorm": True}})
     model = ClassifierModel(config, num_classes=4)
     assert isinstance(model.backbone, PerchV2Backbone)
-    assert model.backbone.input_scale == 0.25 and model.backbone.freeze_batchnorm
+    assert model.backbone.freeze_batchnorm
     assert torch.equal(model.backbone.stem.conv.weight, source.stem.conv.weight)
     assert model(torch.randn(2, 1, 128, 120)).shape == (2, 4)
 

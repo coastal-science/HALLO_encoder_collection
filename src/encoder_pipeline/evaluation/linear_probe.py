@@ -18,13 +18,15 @@ def remap_labels(
     new_idx = {name: i for i, name in enumerate(new_classes)}
     old_to_new = np.array([new_idx[name] for name in mapped])
 
-    remapped = {split: (x, old_to_new[y]) for split, (x, y) in embeddings.items()}
+    to_new = np.eye(len(new_classes))[old_to_new]  # multi-label rows: a new class is set if any old one mapped to it is
+    remapped = {split: (x, old_to_new[y] if y.ndim == 1 else (y @ to_new > 0).astype(y.dtype))
+                for split, (x, y) in embeddings.items()}
     return remapped, new_classes
 
 
 class LinearProbe:
     """Trains a single linear layer on frozen embeddings to predict labels
-    -- full-batch Adam + cross-entropy"""
+    -- full-batch Adam + cross-entropy, or sigmoid + BCE for multi-label (2-D) labels"""
 
     def __init__(self, epochs: int = 1000, lr: float = 3e-4) -> None:
         self.epochs = epochs
@@ -36,8 +38,10 @@ class LinearProbe:
         """Returns the final metrics, the per-epoch loss curves, and every
         split's final class scores (one row per sample, in input order)."""
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        multi_label = next(iter(embeddings.values()))[1].ndim == 2
+        label_dtype = torch.float32 if multi_label else torch.long
         tensors = {
-            split: (torch.tensor(x, dtype=torch.float32, device=device), torch.tensor(y, dtype=torch.long, device=device))
+            split: (torch.tensor(x, dtype=torch.float32, device=device), torch.tensor(y, dtype=label_dtype, device=device))
             for split, (x, y) in embeddings.items()
         }
         x_train, y_train = tensors["train"]
@@ -45,7 +49,7 @@ class LinearProbe:
         # sized by the full class list: a train split can lack classes that val / test have
         model = nn.Linear(x_train.shape[1], len(class_names)).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=self.lr)
-        criterion = nn.CrossEntropyLoss()
+        criterion = nn.BCEWithLogitsLoss() if multi_label else nn.CrossEntropyLoss()
 
         loss_curves: dict[str, list[float]] = {f"{split}_loss": [] for split in tensors}
         for _ in range(self.epochs):
@@ -62,13 +66,15 @@ class LinearProbe:
                     loss_curves[f"{split}_loss"].append(split_loss)
 
         model.eval()
+        self.model = model  # the trained layer, for callers that keep it (EmbeddingsConfig.linear_probe_save)
         metrics: dict[str, float] = {}
         scores: dict[str, np.ndarray] = {}
         with torch.no_grad():
             for split, (x, y) in tensors.items():
                 logits = model(x)
-                y_true, y_pred = y.cpu().numpy(), logits.argmax(dim=1).cpu().numpy()
-                y_score = torch.softmax(logits, dim=1).cpu().numpy()
+                y_score = (torch.sigmoid(logits) if multi_label else torch.softmax(logits, dim=1)).cpu().numpy()
+                y_true = y.cpu().numpy().astype(int) if multi_label else y.cpu().numpy()
+                y_pred = (y_score > 0.5).astype(int) if multi_label else y_score.argmax(axis=1)
                 scores[split] = y_score
                 metrics[f"{split}_accuracy"] = float((y_pred == y_true).mean())
                 for name, value in classification_metrics(y_true, y_pred, y_score).items():

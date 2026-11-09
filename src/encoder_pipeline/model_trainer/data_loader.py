@@ -17,7 +17,8 @@ from encoder_pipeline.model_trainer.config import DataLoaderConfig
 class SpectrogramDataset(Dataset):
     def __init__(
         self, hdf5_path: str, label_col: str = "Labels", class_label_map: Optional[dict[str, str]] = None,
-        classes: Optional[list[str]] = None,
+        classes: Optional[list[str]] = None, multi_label_window_s: Optional[float] = None,
+        background_label: Optional[str] = None,
     ) -> None:
         self.hdf5_path = hdf5_path
         self._h5: Optional[h5py.File] = None
@@ -34,6 +35,10 @@ class SpectrogramDataset(Dataset):
         self.classes = list(classes) if classes is not None else sorted(set(labels))
         self.label_to_idx = {label: i for i, label in enumerate(self.classes)}
         self.labels = [self.label_to_idx[label] for label in labels]
+        self.targets = None if multi_label_window_s is None else window_targets(
+            hdf5_path, np.asarray(self.labels), len(self.classes), multi_label_window_s,
+            self.label_to_idx.get(background_label),
+        )
 
     def _file(self) -> h5py.File:
         if self._h5 is None:
@@ -43,9 +48,31 @@ class SpectrogramDataset(Dataset):
     def __len__(self) -> int:
         return self.length
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int]:
-        spec = self._file()["spec"][idx]
-        return torch.from_numpy(spec).float(), self.labels[idx]
+    def __getitem__(self, idx: int):
+        spec = torch.from_numpy(self._file()["spec"][idx]).float()
+        return spec, self.labels[idx] if self.targets is None else self.targets[idx]
+
+
+def window_targets(
+    hdf5_path: str, labels: np.ndarray, n_classes: int, window_s: float, background: Optional[int] = None,
+) -> np.ndarray:
+    """(n_rows, n_classes) multi-hot targets: row i is positive for its own label and for every row of the same
+    file whose annotation overlaps the window_s window centred on row i. background, if given, stays set only on
+    rows with no other class."""
+    with h5py.File(hdf5_path, "r") as h5:
+        files = _read_column(h5, "LocalPath")
+        begin = pd.to_numeric(pd.Series(_read_column(h5, "FileBeginSec")), errors="coerce").to_numpy()
+        end = begin + pd.to_numeric(pd.Series(_read_column(h5, "Duration")), errors="coerce").to_numpy()
+    targets = np.zeros((len(labels), n_classes), dtype=np.float32)
+    targets[np.arange(len(labels)), labels] = 1
+    w0 = (begin + end) / 2 - window_s / 2
+    for idx in pd.Series(np.arange(len(labels))).groupby(files).indices.values():
+        overlaps = (begin[idx][None, :] < w0[idx][:, None] + window_s) & (end[idx][None, :] > w0[idx][:, None])
+        targets[idx] = np.maximum(targets[idx], overlaps.astype(np.float32) @ np.eye(n_classes, dtype=np.float32)[labels[idx]])
+    if background is not None:
+        others = np.delete(targets, background, axis=1).any(axis=1)
+        targets[others, background] = 0
+    return targets
 
 
 def compute_splits(hdf5_path: str, config: DataLoaderConfig) -> list[dict[str, np.ndarray]]:
@@ -290,7 +317,10 @@ def build_dataloaders(hdf5_path: str, config: DataLoaderConfig, data_dir: str) -
     splits_path = save_splits(hdf5_path, splits, out_dir=f"{data_dir}/model_trainer/{mlflow.active_run().info.run_id}")
     mlflow.log_artifact(splits_path)
 
-    dataset = SpectrogramDataset(hdf5_path, class_label_map=config.class_label_map, classes=config.classes)
+    dataset = SpectrogramDataset(
+        hdf5_path, class_label_map=config.class_label_map, classes=config.classes,
+        multi_label_window_s=config.multi_label_window_s, background_label=config.oversample_background_label,
+    )
 
     def loader(name: str, idx: np.ndarray) -> DataLoader:
         # keep the GPU fed: parallel HDF5 reads, pinned host buffers, workers

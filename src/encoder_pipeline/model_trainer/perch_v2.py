@@ -120,8 +120,6 @@ class PerchV2Backbone(nn.Module):
         "time_freq" for (B, 1, 500, 128), Perch's own. A (B, H, W) input is treated as (B, 1, H, W).
     drop_path_rate: stochastic depth on the residual blocks, train mode only. Perch was trained with 0.2 (chirp's
         survival_probability 0.8); 0 disables it. Eval output is unaffected either way.
-    input_scale: multiplies the input first, to map other log units onto Perch's 0.1 * ln(mel amplitude)
-        (0.1 * ln(10) / 20 for amplitude dB). 1.0 for PerchV2Frontend's output.
     freeze_batchnorm: keep every BatchNorm in eval mode (running statistics) even in train(); affine weights still
         train.
     """
@@ -129,13 +127,12 @@ class PerchV2Backbone(nn.Module):
     out_features = EMBEDDING_DIM
 
     def __init__(self, input_layout: Literal["freq_time", "time_freq"] = "freq_time", drop_path_rate: float = 0.0,
-                 input_scale: float = 1.0, freeze_batchnorm: bool = False) -> None:
+                 freeze_batchnorm: bool = False) -> None:
         super().__init__()
         if input_layout not in ("freq_time", "time_freq"):
             raise ValueError(f"input_layout must be 'freq_time' or 'time_freq', got {input_layout!r}")
         self.input_layout = input_layout
         self.drop_path_rate = drop_path_rate
-        self.input_scale = input_scale
         self.freeze_batchnorm = freeze_batchnorm
         blocks = _b3_blocks()
         self.stem = _ConvBNSiLU(1, blocks[0][0], 3, 2)
@@ -164,8 +161,6 @@ class PerchV2Backbone(nn.Module):
             x = x.unsqueeze(1)
         if self.input_layout == "freq_time":
             x = x.transpose(-1, -2)
-        if self.input_scale != 1.0:
-            x = x * self.input_scale
         x = self.stem(x)
         for block, residual in zip(self.blocks, self.residual):
             y = block(x)
@@ -262,11 +257,9 @@ def perch_v2_state_dict(variables: dict[str, np.ndarray], model: PerchV2Backbone
 
 
 def load_perch_v2_backbone(checkpoint_path: str, input_layout: Literal["freq_time", "time_freq"] = "freq_time",
-                           drop_path_rate: float = 0.0, input_scale: float = 1.0,
-                           freeze_batchnorm: bool = False) -> PerchV2Backbone:
+                           drop_path_rate: float = 0.0, freeze_batchnorm: bool = False) -> PerchV2Backbone:
     """A PerchV2Backbone with the weights written by scripts/perch/convert_perch_v2_to_torch.py."""
-    model = PerchV2Backbone(input_layout=input_layout, drop_path_rate=drop_path_rate, input_scale=input_scale,
-                            freeze_batchnorm=freeze_batchnorm)
+    model = PerchV2Backbone(input_layout=input_layout, drop_path_rate=drop_path_rate, freeze_batchnorm=freeze_batchnorm)
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     model.load_state_dict(checkpoint["state_dict"])
     return model

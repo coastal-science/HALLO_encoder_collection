@@ -70,6 +70,9 @@ class EmbeddingsConfig(StrictBaseModel):
     stage and only reruns the linear probe on it, as a new nested run under <run_id>."""
     linear_probe_epochs: int = 1000
     linear_probe_lr: float = 3e-4
+    linear_probe_save: bool = False
+    """Also write each fold's trained probe (weights + class list) next to its predictions, as
+    fold<n>_linear_probe.pt, so it can score new audio (e.g. scripts/tidas/infer_tidas.py)."""
     linear_probe_label_map: Optional[dict[str, str]] = None
     """Collapses labels for the probe the same way
     DataLoaderConfig.class_label_map does in training, e.g. {"SRKW": "KW",

@@ -301,15 +301,16 @@ class SSAMBATrainer(Trainer):
 
 
 class ClassifierTrainer(Trainer):
-    def __init__(self, config: ClassifierConfig, num_classes: int) -> None:
+    def __init__(self, config: ClassifierConfig, num_classes: int, multi_label: bool = False) -> None:
         self.device = torch.device(config.device)
+        self.multi_label = multi_label
         self.epochs = config.epochs
         self.model = ClassifierModel(config, num_classes).to(self.device)
         if config.init_checkpoint is not None:
             bundle = torch.load(config.init_checkpoint, map_location=self.device, weights_only=False)
             self.model.load_state_dict(bundle["model"].state_dict())
         self.augment = SpectrogramClassifierAugment(config.augment)
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.BCEWithLogitsLoss() if multi_label else nn.CrossEntropyLoss()
         self.optimizer = build_optimizer(
             config.optimizer, self.model.parameters(), config.lr, config.weight_decay, config.momentum,
         )
@@ -356,9 +357,10 @@ class ClassifierTrainer(Trainer):
             with torch.no_grad():
                 for specs, labels in loader:
                     specs = specs.to(self.device).unsqueeze(1)
-                    probs = torch.softmax(self.model(specs), dim=1)
+                    logits = self.model(specs)
+                    probs = torch.sigmoid(logits) if self.multi_label else torch.softmax(logits, dim=1)
                     y_true.append(labels.numpy())
-                    y_pred.append(probs.argmax(dim=1).cpu().numpy())
+                    y_pred.append((probs > 0.5).int().cpu().numpy() if self.multi_label else probs.argmax(dim=1).cpu().numpy())
                     y_score.append(probs.cpu().numpy())
             y_true_arr, y_pred_arr, y_score_arr = np.concatenate(y_true), np.concatenate(y_pred), np.concatenate(y_score)
             for name, value in classification_metrics(y_true_arr, y_pred_arr, y_score_arr).items():
@@ -416,9 +418,9 @@ def train_model(
         ]
     else:
         assert config.classifier is not None, "model_trainer.classifier config is required when paradigm is 'classifier'"
-        num_classes = len(next(iter(dataloaders[0].values())).dataset.dataset.classes)
+        dataset = next(iter(dataloaders[0].values())).dataset.dataset
         results = [
-            ClassifierTrainer(config.classifier, num_classes).fit(
+            ClassifierTrainer(config.classifier, len(dataset.classes), dataset.targets is not None).fit(
                 loaders, fold, data_dir, spectrogram_config, on_epoch_end,
             )
             for fold, loaders in enumerate(dataloaders)

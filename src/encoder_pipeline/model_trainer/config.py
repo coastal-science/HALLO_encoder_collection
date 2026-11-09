@@ -52,6 +52,11 @@ class DataLoaderConfig(StrictBaseModel):
     Unset = keep every train row."""
     train_overlap_splits: list[str] = ["test"]
     """Splits whose rows' simultaneous copies train_overlap_tol_s drops from train."""
+    multi_label_window_s: Optional[float] = None
+    """Set to the preprocessor's window length (2 * annotation.time_offset) to train multi-label: each row's target
+    is every class annotated in the same file (LocalPath) within the window centred on the row (file-edge shifts
+    ignored), with oversample_background_label set only when no other class is. Trains and probes with sigmoid +
+    BCE; the oversampler still balances on each row's own label. Unset = one label per row (softmax)."""
     oversample: bool = True
     """Oversample the train split so every class is drawn to the largest
     class's size each epoch, via a WeightedRandomSampler. Applies to any
@@ -106,7 +111,8 @@ class SSAMBAClassifierConfig(SSAMBAEncoderConfig):
     pretrained_path: Optional[str] = None
     """Local path to a fold<n>_best.pt / fold<n>_last.pt written by a
     paradigm 'ssamba' run; its encoder weights are loaded before training.
-    Needs the same variant and geometry. Unset = train from scratch."""
+    Needs the same variant and patch size; a different spectrogram size is
+    fine (position embeddings are resized). Unset = train from scratch."""
 
 
 PerchV2Variant = Literal["perch_v2"]
@@ -114,17 +120,14 @@ PerchV2Variant = Literal["perch_v2"]
 
 class PerchV2ClassifierConfig(StrictBaseModel):
     """Perch v2's EfficientNet-B3 (model_trainer/perch_v2.py) as a classifier backbone, initialised from Google's
-    released weights. Perch was trained on its own log-mel spectrogram, so the preprocessor has to approximate it
-    (see configs/perch_v2_finetune/00_base.yaml) and input_scale has to map its units onto Perch's."""
+    released weights. It sees the preprocessor's spectrograms exactly as they are, with no rescaling onto Perch's
+    own log-mel units."""
 
     pretrained_path: str
     """Weights written by scripts/perch/convert_perch_v2_to_torch.py, e.g.
     data/model_trainer/pretrained/perch_v2_backbone.pt."""
     input_layout: Literal["freq_time", "time_freq"] = "freq_time"
     """Orientation of the spectrograms the loader yields: the preprocessor's are (n_mels, frames) = freq_time."""
-    input_scale: float = 1.0
-    """Multiplies the input before the backbone. Perch's input is 0.1 * ln(mel amplitude), so for the
-    preprocessor's amplitude dB (dynamic 'db', mel.power 1) use 0.1 * ln(10) / 20 = 0.011512925464970229."""
     drop_path_rate: float = 0.0
     """Stochastic depth on the residual blocks while training; Perch itself was trained with 0.2."""
     freeze_batchnorm: bool = False
@@ -259,6 +262,10 @@ class ClassifierConfig(StrictBaseModel):
     classifier run; its weights (backbone + head) are loaded before training,
     for fine-tuning. Needs the same backbone_name and class list. Unset =
     train from scratch."""
+    init_backbone_checkpoint: Optional[str] = None
+    """Local path to any prior model_trainer checkpoint (classifier, SSL or ssamba run) whose backbone only is
+    loaded before training; the head starts fresh, so the class list can differ. Needs the same backbone_name;
+    an SSAMBA one may come from another spectrogram size (position embeddings are resized)."""
     augment: SpectrogramClassifierAugmentConfig = SpectrogramClassifierAugmentConfig()
     epochs: int = 10
     optimizer:Literal["adam", "adamw", "sgd", "rmsprop"] = "adam"

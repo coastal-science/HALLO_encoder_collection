@@ -1,0 +1,25 @@
+,,,precision,recall,f1
+strait_of_georgia,val_tuned,Perch v2 (linear probe),0.891 ± 0.032,0.863 ± 0.017,0.877 ± 0.008
+strait_of_georgia,val_tuned,EfficientNet-B1 (linear probe),0.628 ± 0.016,0.723 ± 0.049,0.671 ± 0.019
+strait_of_georgia,val_tuned,Whisper medium (linear probe),0.371 ± 0.050,0.607 ± 0.078,0.455 ± 0.025
+strait_of_georgia,val_tuned,Whisper large-v3 (linear probe),0.306 ± 0.017,0.537 ± 0.067,0.388 ± 0.011
+strait_of_georgia,argmax,Perch v2 (linear probe),0.932 ± 0.014,0.840 ± 0.010,0.884 ± 0.005
+strait_of_georgia,argmax,EfficientNet-B1 (linear probe),0.599 ± 0.074,0.762 ± 0.070,0.665 ± 0.033
+strait_of_georgia,argmax,Whisper medium (linear probe),0.369 ± 0.033,0.564 ± 0.064,0.444 ± 0.036
+strait_of_georgia,argmax,Whisper large-v3 (linear probe),0.297 ± 0.049,0.295 ± 0.085,0.289 ± 0.050
+limekiln,val_tuned,Perch v2 (linear probe),0.910 ± 0.042,0.844 ± 0.059,0.873 ± 0.022
+limekiln,val_tuned,EfficientNet-B1 (linear probe),0.965 ± 0.006,0.947 ± 0.024,0.956 ± 0.010
+limekiln,val_tuned,Whisper medium (linear probe),0.783 ± 0.049,0.719 ± 0.114,0.747 ± 0.080
+limekiln,val_tuned,Whisper large-v3 (linear probe),0.653 ± 0.011,0.606 ± 0.095,0.626 ± 0.051
+limekiln,argmax,Perch v2 (linear probe),0.943 ± 0.007,0.828 ± 0.000,0.882 ± 0.003
+limekiln,argmax,EfficientNet-B1 (linear probe),0.965 ± 0.006,0.953 ± 0.022,0.959 ± 0.011
+limekiln,argmax,Whisper medium (linear probe),0.866 ± 0.034,0.369 ± 0.134,0.504 ± 0.135
+limekiln,argmax,Whisper large-v3 (linear probe),0.696 ± 0.073,0.244 ± 0.143,0.346 ± 0.164
+tekteksen,val_tuned,Perch v2 (linear probe),0.942 ± 0.036,0.837 ± 0.065,0.884 ± 0.027
+tekteksen,val_tuned,EfficientNet-B1 (linear probe),0.930 ± 0.028,0.881 ± 0.043,0.904 ± 0.014
+tekteksen,val_tuned,Whisper medium (linear probe),0.670 ± 0.026,0.679 ± 0.095,0.670 ± 0.039
+tekteksen,val_tuned,Whisper large-v3 (linear probe),0.561 ± 0.044,0.739 ± 0.238,0.620 ± 0.075
+tekteksen,argmax,Perch v2 (linear probe),0.991 ± 0.003,0.710 ± 0.053,0.827 ± 0.036
+tekteksen,argmax,EfficientNet-B1 (linear probe),0.890 ± 0.030,0.935 ± 0.021,0.912 ± 0.013
+tekteksen,argmax,Whisper medium (linear probe),0.783 ± 0.046,0.343 ± 0.123,0.467 ± 0.127
+tekteksen,argmax,Whisper large-v3 (linear probe),0.705 ± 0.027,0.250 ± 0.033,0.368 ± 0.037

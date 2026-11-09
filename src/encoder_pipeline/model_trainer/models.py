@@ -2,6 +2,7 @@ import copy
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision.models as tv_models
 from lightly.models.modules import MoCoProjectionHead, SimCLRProjectionHead
 from lightly.models.utils import deactivate_requires_grad
@@ -117,13 +118,26 @@ class MoCoV3Model(nn.Module):
         return self.projection_head_momentum(self.backbone_momentum(x))
 
 
+def load_backbone(backbone: nn.Module, checkpoint_path: str) -> None:
+    """Loads the backbone of a prior model_trainer checkpoint (any paradigm's model.backbone) into backbone, leaving
+    out every head, so it can start a model with another class list. An SSAMBA checkpoint pretrained on another
+    patch grid (spectrogram size) has its position embeddings resized bilinearly to backbone's grid."""
+    source = torch.load(checkpoint_path, map_location="cpu", weights_only=False)["model"].backbone
+    state = source.state_dict()
+    if isinstance(backbone, SSAMBABackbone) and state["v.pos_embed"].shape != backbone.v.pos_embed.shape:
+        cls_pos, grid = state["v.pos_embed"][:, :1], state["v.pos_embed"][:, 1:]
+        grid = grid.reshape(1, source.p_f_dim, source.p_t_dim, -1).permute(0, 3, 1, 2)
+        grid = F.interpolate(grid, size=(backbone.p_f_dim, backbone.p_t_dim), mode="bilinear", align_corners=False)
+        state["v.pos_embed"] = torch.cat([cls_pos, grid.flatten(2).transpose(1, 2)], dim=1)
+    backbone.load_state_dict(state)
+
+
 def build_ssamba_backbone(config: ClassifierConfig) -> SSAMBABackbone:
     """SSAMBA encoder for a classifier, initialised from ssamba.pretrained_path if set."""
     assert config.ssamba is not None, "model_trainer.classifier.ssamba is required for an ssamba_* backbone_name"
     ssamba_backbone = SSAMBABackbone(config.backbone_name, config.ssamba)
     if config.ssamba.pretrained_path is not None:
-        bundle = torch.load(config.ssamba.pretrained_path, map_location="cpu", weights_only=False)
-        ssamba_backbone.load_state_dict(bundle["model"].backbone.state_dict())
+        load_backbone(ssamba_backbone, config.ssamba.pretrained_path)
     return ssamba_backbone
 
 
@@ -132,8 +146,7 @@ def build_perch_v2_backbone(config: ClassifierConfig) -> PerchV2Backbone:
     assert config.perch_v2 is not None, "model_trainer.classifier.perch_v2 is required for backbone_name perch_v2"
     perch = config.perch_v2
     return load_perch_v2_backbone(perch.pretrained_path, input_layout=perch.input_layout,
-                                  drop_path_rate=perch.drop_path_rate, input_scale=perch.input_scale,
-                                  freeze_batchnorm=perch.freeze_batchnorm)
+                                  drop_path_rate=perch.drop_path_rate, freeze_batchnorm=perch.freeze_batchnorm)
 
 
 class ClassifierModel(nn.Module):
@@ -145,6 +158,8 @@ class ClassifierModel(nn.Module):
             self.backbone = build_perch_v2_backbone(config)
         else:
             self.backbone = build_backbone(config.backbone_name)
+        if config.init_backbone_checkpoint is not None:
+            load_backbone(self.backbone, config.init_backbone_checkpoint)
         self.classifier = nn.Linear(self.backbone.out_features, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

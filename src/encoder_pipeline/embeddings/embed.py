@@ -93,15 +93,29 @@ class PerchEmbeddingModel(EmbeddingModel):
         codes, uniques = pd.factorize(pd.MultiIndex.from_frame(clips[["LocalPath", "FileBeginSec", "Duration"]]))
         embeddings = np.empty((len(uniques), self.embedding_dim), dtype=np.float32)
         ok = np.zeros(len(uniques), dtype=bool)
+        # clips embedded by an earlier extract() call on this model (every k-fold fold re-embeds the same clips)
+        # come from the cache; None marks a clip that failed to load
+        cache = self.__dict__.setdefault("_cache", {})
+        todo = []
+        for i, key in enumerate(uniques):
+            if key in cache:
+                if cache[key] is not None:
+                    embeddings[i], ok[i] = cache[key], True
+            else:
+                todo.append(i)
+        if len(todo) < len(uniques):
+            logger.info("perch: {} of {} unique clips from the cache", len(uniques) - len(todo), len(uniques))
         with ThreadPoolExecutor(max_workers=self.load_workers) as pool:
-            for start in range(0, len(uniques), self.chunk_size):
-                stop = min(start + self.chunk_size, len(uniques))
-                loaded = list(pool.map(lambda key: self._safe_load(*key), uniques[start:stop]))
-                chunk_ok = np.array([w is not None for w in loaded])
-                ok[start:stop] = chunk_ok
-                if chunk_ok.any():
-                    embeddings[start:stop][chunk_ok] = self._embed([w for w in loaded if w is not None])
-                logger.info("perch: embedded {}/{} unique clips", stop, len(uniques))
+            for start in range(0, len(todo), self.chunk_size):
+                idx = todo[start:start + self.chunk_size]
+                loaded = list(pool.map(lambda i: self._safe_load(*uniques[i]), idx))
+                good = [i for i, w in zip(idx, loaded) if w is not None]
+                if good:
+                    embeddings[good] = self._embed([w for w in loaded if w is not None])
+                    ok[good] = True
+                for i in idx:
+                    cache[uniques[i]] = embeddings[i].copy() if ok[i] else None
+                logger.info("perch: embedded {}/{} new unique clips", start + len(idx), len(todo))
         keep = ok[codes]
         n_failed = int((~keep).sum())
         if n_failed:
