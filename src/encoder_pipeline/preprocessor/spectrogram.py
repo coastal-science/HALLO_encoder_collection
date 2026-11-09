@@ -1,5 +1,6 @@
 import librosa
 import numpy as np
+import scipy.signal
 
 from encoder_pipeline.preprocessor.annotation import Annotation
 from encoder_pipeline.preprocessor.config import SpectrogramConfig
@@ -37,20 +38,32 @@ class Spectrogram:
 
         pcen: librosa.pcen (Per-Channel Energy Normalization). Expects a
         power spectrogram (config.mel.power=2.0) -- PCEN's own AGC assumes
-        energy, not amplitude.
+        energy, not amplitude. The smoother is started at steady state on
+        each band's mean over the first time_constant seconds: librosa's
+        default start (steady state for an input of 1.0) is far above
+        float-audio energies (~1e-6), so the background estimate took ~10x
+        time_constant to decay and suppressed the start of every window. A
+        single first frame is too noisy (and half zero-padding when center=True).
         """
         if self.config.dynamic == "pcen":
             pcen_config = self.config.pcen
+            sr = annotation.file.sr
             hop_length = self.config.stft.hop_length or self.config.stft.n_fft // 4
+            # same smoothing coefficient librosa.pcen derives from time_constant
+            t_frames = pcen_config.time_constant * sr / float(hop_length)
+            b = (np.sqrt(1 + 4 * t_frames**2) - 1) / (2 * t_frames**2)
+            n_init = int(np.clip(round(t_frames), 1, spec.shape[-1]))
+            zi = scipy.signal.lfilter_zi([b], [1, b - 1]) * spec[..., :n_init].mean(axis=-1, keepdims=True)
             return librosa.pcen(
                 spec,
-                sr=annotation.file.sr,
+                sr=sr,
                 hop_length=hop_length,
                 gain=pcen_config.gain,
                 bias=pcen_config.bias,
                 power=pcen_config.power,
                 time_constant=pcen_config.time_constant,
                 eps=pcen_config.eps,
+                zi=zi,
             )
         elif self.config.dynamic == "db":
             db_config = self.config.db
