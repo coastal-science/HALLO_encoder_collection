@@ -36,9 +36,10 @@ def test_load_backbone_resizes_ssamba_position_embeddings(tmp_path):
 
 
 def _windows_hdf5(tmp_path) -> str:
-    # one file: a blue call at 10-20 s, a fin call at 22-23 s, background tiles at 60 s and 100 s; another file's fin
+    # one file: blue calls at 10-20 s and 25-27 s, a fin call at 22-23 s, background at 60 s and 100 s; another file's fin
     path = tmp_path / "windows.h5"
     rows = [("a.wav", 10.0, 10.0, "BlueWhale"), ("a.wav", 22.0, 1.0, "FinWhale"), ("a.wav", 60.0, 5.0, "Background"),
+            ("a.wav", 25.0, 2.0, "BlueWhale"),
             ("a.wav", 100.0, 5.0, "Background"), ("b.wav", 15.0, 1.0, "FinWhale")]
     with h5py.File(path, "w") as h5:
         h5.create_dataset("spec", data=np.zeros((len(rows), 2, 3)))
@@ -51,12 +52,14 @@ def test_multi_label_targets_include_every_class_in_the_window(tmp_path):
     path = _windows_hdf5(tmp_path)
     dataset = SpectrogramDataset(path, multi_label_window_s=30.0, background_label="Background")
     assert dataset.classes == ["Background", "BlueWhale", "FinWhale"]
-    expected = [[0, 1, 1],  # blue window 0-30 s also holds the fin call
-                [0, 1, 1],  # fin window 7.5-37.5 s also holds the blue call
-                [1, 0, 0], [1, 0, 0],
+    expected = [[0, 1, 1],  # blue window 0-30 s also holds the fin call and the second blue call (still 1, not 2)
+                [0, 1, 1],  # fin window 7.5-37.5 s also holds both blue calls
+                [1, 0, 0],
+                [0, 1, 1],  # second blue call
+                [1, 0, 0],
                 [0, 0, 1]]  # other file: no blue call leaks in
     np.testing.assert_array_equal(dataset.targets, expected)
-    assert dataset.labels == [1, 2, 0, 0, 2]  # the oversampler still balances on each row's own label
+    assert dataset.labels == [1, 2, 0, 1, 0, 2]  # the oversampler still balances on each row's own label
     assert dataset[0][1].tolist() == [0, 1, 1]
     assert SpectrogramDataset(path).targets is None
 

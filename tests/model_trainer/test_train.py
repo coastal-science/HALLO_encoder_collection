@@ -137,3 +137,35 @@ def test_fit_with_early_stopping_requires_a_val_loader(tmp_path, loaders):
     trainer = ClassifierTrainer(ClassifierConfig(device="cpu", epochs=3, early_stopping_patience=1), num_classes=2)
     with mlflow.start_run(), pytest.raises(AssertionError):
         trainer.fit({"train": loaders["train"]}, fold=0, data_dir=str(tmp_path))
+
+
+def _bare_ssamba_trainer(epochs: int, warmup: int, lr: float = 1e-3, min_lr: float = 0.0):
+    """An SSAMBATrainer shell with just what _build_step_scheduler needs (no SSAMBA model / GPU)."""
+    from encoder_pipeline.model_trainer.train import SSAMBATrainer
+
+    trainer = SSAMBATrainer.__new__(SSAMBATrainer)
+    trainer.epochs, trainer.warmup_steps, trainer.min_lr = epochs, warmup, min_lr
+    trainer.optimizer = torch.optim.AdamW([torch.nn.Parameter(torch.zeros(1))], lr=lr)
+    return trainer
+
+
+def test_ssamba_step_scheduler_warms_up_linearly_then_cosine_decays_to_min():
+    trainer = _bare_ssamba_trainer(epochs=2, warmup=10, lr=1e-3, min_lr=1e-5)
+    scheduler = trainer._build_step_scheduler(steps_per_epoch=50)  # 100 steps in total
+    lrs = []
+    for _ in range(100):
+        lrs.append(trainer.optimizer.param_groups[0]["lr"])
+        trainer.optimizer.step()
+        scheduler.step()
+    assert lrs[0] == pytest.approx(1e-4)  # 1 / 10 of peak on the first step
+    assert lrs[9] == pytest.approx(1e-3)  # peak at the end of warmup
+    assert all(a <= b for a, b in zip(lrs[:10], lrs[1:10]))
+    assert all(a >= b for a, b in zip(lrs[10:], lrs[11:]))  # monotone decay after warmup
+    assert trainer.optimizer.param_groups[0]["lr"] == pytest.approx(1e-5)  # min_lr after the last step
+
+
+def test_ssamba_config_warmup_defaults_off():
+    from encoder_pipeline.model_trainer.config import SSAMBAConfig
+
+    fields = SSAMBAConfig.model_fields
+    assert fields["lr_warmup_steps"].default == 0 and fields["log_train_loss_every"].default == 0

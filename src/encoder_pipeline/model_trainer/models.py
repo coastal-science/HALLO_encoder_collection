@@ -10,6 +10,9 @@ from lightly.models.utils import deactivate_requires_grad
 from encoder_pipeline.model_trainer.config import (
     ClassifierConfig, EfficientNetVariant, MoCoConfig, MoCoV3Config, ResNetVariant, SimCLRConfig, backbone,
 )
+from encoder_pipeline.model_trainer.audio_jepa_model import (
+    AudioJEPABackbone, build_audio_jepa_backbone, load_audio_jepa_state,
+)
 from encoder_pipeline.model_trainer.perch_v2 import PerchV2Backbone, load_perch_v2_backbone
 from encoder_pipeline.model_trainer.ssamba import SSAMBABackbone
 
@@ -121,9 +124,14 @@ class MoCoV3Model(nn.Module):
 def load_backbone(backbone: nn.Module, checkpoint_path: str) -> None:
     """Loads the backbone of a prior model_trainer checkpoint (any paradigm's model.backbone) into backbone, leaving
     out every head, so it can start a model with another class list. An SSAMBA checkpoint pretrained on another
-    patch grid (spectrogram size) has its position embeddings resized bilinearly to backbone's grid."""
+    patch grid (spectrogram size) has its position embeddings resized bilinearly to backbone's grid; an Audio-JEPA one
+    keeps backbone's own (fixed sin-cos) position embeddings."""
     source = torch.load(checkpoint_path, map_location="cpu", weights_only=False)["model"].backbone
     state = source.state_dict()
+    if isinstance(backbone, AudioJEPABackbone):
+        # Audio-JEPA position embeddings are fixed 2-D sin-cos of the patch grid: keep backbone's own
+        load_audio_jepa_state(backbone, state)
+        return
     if isinstance(backbone, SSAMBABackbone) and state["v.pos_embed"].shape != backbone.v.pos_embed.shape:
         cls_pos, grid = state["v.pos_embed"][:, :1], state["v.pos_embed"][:, 1:]
         grid = grid.reshape(1, source.p_f_dim, source.p_t_dim, -1).permute(0, 3, 1, 2)
@@ -154,6 +162,13 @@ class ClassifierModel(nn.Module):
         super().__init__()
         if config.backbone_name.startswith("ssamba"):
             self.backbone = build_ssamba_backbone(config)
+        elif config.backbone_name.startswith("audio_jepa"):
+            assert config.audio_jepa is not None, (
+                "model_trainer.classifier.audio_jepa is required for an audio_jepa_* backbone_name"
+            )
+            self.backbone = build_audio_jepa_backbone(config.backbone_name, config.audio_jepa)
+            if config.audio_jepa.pretrained_path is not None:
+                load_backbone(self.backbone, config.audio_jepa.pretrained_path)
         elif config.backbone_name == "perch_v2":
             self.backbone = build_perch_v2_backbone(config)
         else:

@@ -15,8 +15,13 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from encoder_pipeline.evaluation.metrics import classification_metrics, per_class_metrics
 from encoder_pipeline.evaluation.predictions import predictions_frame
+from encoder_pipeline.model_trainer.audio_jepa.cosine_wd import CosineWDScheduler
+from encoder_pipeline.model_trainer.audio_jepa.multiblock import MaskCollator as MultiblockMaskCollator
+from encoder_pipeline.model_trainer.audio_jepa.random_block import MaskCollator as RandomBlockMaskCollator
+from encoder_pipeline.model_trainer.audio_jepa.warmup_cosine import WarmupCosineScheduler
+from encoder_pipeline.model_trainer.audio_jepa_model import AudioJEPAModel, ema_tau, init_from_audioset
 from encoder_pipeline.model_trainer.config import (
-    ClassifierConfig, MoCoConfig, MoCoV3Config, ModelTrainerConfig, SimCLRConfig, SSAMBAConfig,
+    AudioJEPAConfig, ClassifierConfig, MoCoConfig, MoCoV3Config, ModelTrainerConfig, SimCLRConfig, SSAMBAConfig,
 )
 from encoder_pipeline.model_trainer.data_loader import load_uids, ordered_loader
 from encoder_pipeline.model_trainer.models import ClassifierModel, MoCoModel, MoCoV3Model, SimCLRModel
@@ -274,19 +279,43 @@ class SSAMBATrainer(Trainer):
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(), lr=config.lr, weight_decay=config.weight_decay, betas=(0.95, 0.999),
         )
+        self.warmup_steps = config.lr_warmup_steps
+        self.min_lr = config.lr_scheduler_min_lr
+        self.log_train_loss_every = config.log_train_loss_every
+        # per-step warmup + cosine is built on the first train epoch, once steps per epoch are known; it is kept
+        # out of self.scheduler so fit() does not also step it once per epoch
+        self.step_scheduler: Optional[torch.optim.lr_scheduler.LambdaLR] = None
+        self.global_step = 0
         self.scheduler = (
             torch.optim.lr_scheduler.CosineAnnealingLR(
                 self.optimizer, T_max=config.epochs, eta_min=config.lr_scheduler_min_lr,
             )
-            if config.lr_scheduler else None
+            if config.lr_scheduler and not config.lr_warmup_steps else None
         )
         self.amp = config.amp
         self.max_grad_norm = config.max_grad_norm
         self.early_stopping_patience = config.early_stopping_patience
 
+    def _build_step_scheduler(self, steps_per_epoch: int) -> torch.optim.lr_scheduler.LambdaLR:
+        """Linear warmup over warmup_steps, then cosine to min_lr by the end of the last epoch."""
+        total = max(self.epochs * steps_per_epoch, self.warmup_steps + 1)
+        base_lr = self.optimizer.param_groups[0]["lr"]
+        floor = self.min_lr / base_lr if base_lr > 0 else 0.0
+
+        def factor(step: int) -> float:
+            if step < self.warmup_steps:
+                return (step + 1) / self.warmup_steps
+            progress = min((step - self.warmup_steps) / (total - self.warmup_steps), 1.0)
+            return floor + (1 - floor) * 0.5 * (1 + math.cos(math.pi * progress))
+
+        return torch.optim.lr_scheduler.LambdaLR(self.optimizer, factor)
+
     def _run_epoch(self, loader: DataLoader, train: bool) -> float:
         self.model.train(train)
+        if train and self.warmup_steps and self.step_scheduler is None:
+            self.step_scheduler = self._build_step_scheduler(len(loader))
         total_loss = 0.0
+        window_loss, window_n = 0.0, 0
         for specs, _labels in loader:
             specs = specs.to(self.device).unsqueeze(1)
             with torch.set_grad_enabled(train), self._autocast():
@@ -296,7 +325,128 @@ class SSAMBATrainer(Trainer):
                 raise FloatingPointError(f"ssamba loss diverged ({loss.item()})")
             if train:
                 self._optimizer_step(loss)
+                self.global_step += 1
+                if self.step_scheduler is not None:
+                    self.step_scheduler.step()
+                if self.log_train_loss_every:
+                    window_loss, window_n = window_loss + loss.item(), window_n + 1
+                    if window_n == self.log_train_loss_every:
+                        mlflow.log_metric("train_loss_step", window_loss / window_n, step=self.global_step)
+                        mlflow.log_metric("lr_step", self.optimizer.param_groups[0]["lr"], step=self.global_step)
+                        window_loss, window_n = 0.0, 0
             total_loss += loss.item() * specs.size(0)
+        return total_loss / len(loader.dataset)
+
+
+class AudioJEPATrainer(Trainer):
+    """Upstream JEPAModule's training without Lightning: AdamW over its four param groups (encoder / predictor, with
+    biases and 1-d params kept out of weight decay), WarmupCosineScheduler + CosineWDScheduler stepped every optimiser
+    step, then the MAWeightUpdate EMA of the target encoder with a cosine tau ramp. Masks come from upstream's
+    collators: train draws continue one seed sequence across epochs; val re-creates its collator every epoch, so
+    every val pass scores the same masks."""
+
+    def __init__(self, config: AudioJEPAConfig) -> None:
+        self.config = config
+        self.device = torch.device(config.device)
+        self.epochs = config.epochs
+        self.save_every_epoch = config.save_every_epoch
+        self.model = AudioJEPAModel(config)
+        assert not (config.audioset_checkpoint and config.init_checkpoint), (
+            "set at most one of audio_jepa.audioset_checkpoint / init_checkpoint"
+        )
+        if config.audioset_checkpoint is not None:
+            init_from_audioset(self.model, config.audioset_checkpoint)
+        if config.init_checkpoint is not None:
+            bundle = torch.load(config.init_checkpoint, map_location="cpu", weights_only=False)
+            self.model.load_state_dict(bundle["model"].state_dict())
+        self.model.to(self.device)
+        encoder, predictor = self.model.context_encoder, self.model.predictor
+        decayed = lambda n, p: ("bias" not in n) and (len(p.shape) != 1)  # jepa_module.configure_optimizers
+        param_groups = [
+            {"params": [p for n, p in encoder.named_parameters() if decayed(n, p) and p.requires_grad]},
+            {"params": [p for n, p in predictor.named_parameters() if decayed(n, p) and p.requires_grad]},
+            {"params": [p for n, p in encoder.named_parameters() if not decayed(n, p) and p.requires_grad],
+             "WD_exclude": True, "weight_decay": 0},
+            {"params": [p for n, p in predictor.named_parameters() if not decayed(n, p) and p.requires_grad],
+             "WD_exclude": True, "weight_decay": 0},
+        ]
+        self.optimizer = torch.optim.AdamW(
+            param_groups, lr=config.lr, weight_decay=config.weight_decay, betas=tuple(config.betas),
+        )
+        self.lr_scheduler: Optional[WarmupCosineScheduler] = None
+        self.wd_scheduler: Optional[CosineWDScheduler] = None
+        self.total_steps = 0
+        self.global_step = 0
+        self.tau = config.ema_initial_tau
+        self.amp = config.amp
+        self.max_grad_norm = config.max_grad_norm
+        self.early_stopping_patience = config.early_stopping_patience
+        self.log_train_loss_every = config.log_train_loss_every
+        self.train_collator = self._collator()
+        self.val_epochs = 0
+
+    def _collator(self):
+        c, backbone = self.config, self.model.context_encoder
+        input_size = (backbone.grid_t * backbone.patch_t, backbone.grid_f * backbone.patch_f)
+        patch_size = (backbone.patch_t, backbone.patch_f)
+        if c.masks == "random_block":
+            return RandomBlockMaskCollator(ratio=tuple(c.mask_ratio), input_size=input_size, patch_size=patch_size)
+        return MultiblockMaskCollator(
+            input_size=input_size, patch_size=patch_size, enc_mask_scale=tuple(c.enc_mask_scale),
+            pred_mask_scale=tuple(c.pred_mask_scale), aspect_ratio=tuple(c.aspect_ratio), nenc=1, npred=c.npred,
+        )
+
+    def _build_schedulers(self, steps_per_epoch: int) -> None:
+        self.total_steps = max(self.epochs * steps_per_epoch, 1)
+        self.lr_scheduler = WarmupCosineScheduler(
+            self.optimizer, warmup_steps=self.config.warmup_steps, start_lr=self.config.start_lr,
+            ref_lr=self.config.lr, T_max=self.total_steps, final_lr=self.config.final_lr,
+        )
+        self.wd_scheduler = CosineWDScheduler(
+            self.optimizer, ref_wd=self.config.weight_decay, T_max=self.total_steps,
+            final_wd=self.config.final_weight_decay,
+        )
+
+    def _run_epoch(self, loader: DataLoader, train: bool) -> float:
+        self.model.train(train)
+        if train and self.lr_scheduler is None:
+            self._build_schedulers(len(loader))
+        collator = self.train_collator if train else self._collator()
+        total_loss, pred_var_sum, n_batches = 0.0, 0.0, 0
+        window_loss, window_n = 0.0, 0
+        for specs, _labels in loader:
+            specs = specs.to(self.device).unsqueeze(1)
+            masks = collator(specs)
+            context_masks = [m.to(self.device, non_blocking=True) for m in masks.context_masks]
+            prediction_masks = [m.to(self.device, non_blocking=True) for m in masks.prediction_masks]
+            with torch.set_grad_enabled(train), self._autocast():
+                loss, z_pred = self.model(specs, context_masks, prediction_masks)
+            if not torch.isfinite(loss):
+                raise FloatingPointError(f"audio_jepa loss diverged ({loss.item()})")
+            if train:
+                self._optimizer_step(loss)
+                self.lr_scheduler.step()
+                self.wd_scheduler.step()
+                self.model.update_target(self.tau)
+                self.global_step += 1
+                self.tau = ema_tau(self.global_step, self.total_steps,
+                                   self.config.ema_initial_tau, self.config.ema_final_tau)
+                if self.log_train_loss_every:
+                    window_loss, window_n = window_loss + loss.item(), window_n + 1
+                    if window_n == self.log_train_loss_every:
+                        mlflow.log_metrics({
+                            "train_loss_step": window_loss / window_n,
+                            "lr_step": self.optimizer.param_groups[0]["lr"],
+                            "ema_tau_step": self.tau,
+                        }, step=self.global_step)
+                        window_loss, window_n = 0.0, 0
+            else:
+                pred_var_sum += torch.var(z_pred.float()).item()  # upstream's val/variance: a collapse check
+                n_batches += 1
+            total_loss += loss.item() * specs.size(0)
+        if not train and n_batches:
+            mlflow.log_metric("val_pred_variance", pred_var_sum / n_batches, step=self.val_epochs)
+            self.val_epochs += 1
         return total_loss / len(loader.dataset)
 
 
@@ -414,6 +564,12 @@ def train_model(
         assert config.ssamba is not None, "model_trainer.ssamba config is required when paradigm is 'ssamba'"
         results = [
             SSAMBATrainer(config.ssamba).fit(loaders, fold, data_dir, spectrogram_config, on_epoch_end)
+            for fold, loaders in enumerate(dataloaders)
+        ]
+    elif config.paradigm == "audio_jepa":
+        assert config.audio_jepa is not None, "model_trainer.audio_jepa config is required when paradigm is 'audio_jepa'"
+        results = [
+            AudioJEPATrainer(config.audio_jepa).fit(loaders, fold, data_dir, spectrogram_config, on_epoch_end)
             for fold, loaders in enumerate(dataloaders)
         ]
     else:

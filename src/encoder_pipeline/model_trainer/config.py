@@ -115,6 +115,104 @@ class SSAMBAClassifierConfig(SSAMBAEncoderConfig):
     fine (position embeddings are resized). Unset = train from scratch."""
 
 
+AudioJEPAVariant = Literal["audio_jepa_vit_tiny", "audio_jepa_vit_small", "audio_jepa_vit_base"]
+"""Audio-JEPA's VisionTransformer (model_trainer/audio_jepa, vendored from LudovicTuncay/Audio-JEPA) at ViT
+tiny (192-d, 3 heads) / small (384-d, 6 heads) / base (768-d, 12 heads), 12 blocks each. The paper and the released
+AudioSet checkpoint are base."""
+
+
+class AudioJEPAEncoderConfig(StrictBaseModel):
+    """Input + patch geometry of the Audio-JEPA ViT encoder. Spectrograms arrive (n_mels, frames) and are transposed to
+    upstream's (time, freq) layout; frames / bins past the last whole patch are cropped."""
+
+    input_fdim: int
+    """Spectrogram frequency bins, e.g. the preprocessor's n_mels."""
+    input_tdim: int
+    """Spectrogram time frames."""
+    patch_size: tuple[int, int] = (16, 16)
+    """(time frames, freq bins) per patch, upstream's order; patches don't overlap."""
+    drop_path_rate: float = 0.0
+    """Stochastic depth of the last block, ramped linearly from 0 (upstream: 0)."""
+    input_norm: Literal["per_clip", "none"] = "per_clip"
+    """per_clip: standardise each spectrogram to zero mean / unit variance, as the SSAMBA arms do. none: feed the
+    preprocessor's values as they are (upstream feeds raw log-fbank)."""
+
+
+class AudioJEPAClassifierConfig(AudioJEPAEncoderConfig):
+    """Audio-JEPA encoder used as a classifier backbone; the clip embedding is the mean patch token."""
+
+    pretrained_path: Optional[str] = None
+    """Local fold<n>_best.pt / fold<n>_last.pt of a paradigm 'audio_jepa' run; its downstream encoder (see
+    AudioJEPAConfig.downstream_encoder) is loaded. Needs the same variant and patch size; another spectrogram size is
+    fine (the position embeddings are fixed 2-D sin-cos and are rebuilt for this grid)."""
+    audioset_checkpoint: Optional[str] = None
+    """Local path to upstream's released AudioSet JEPA.ckpt (huggingface.co/ltuncay/Audio-JEPA, ViT-base); its
+    audioset_checkpoint_module weights are loaded. Mutually exclusive with pretrained_path."""
+    audioset_checkpoint_module: Literal["encoder", "target_encoder"] = "encoder"
+    """Which of JEPA.ckpt's encoders to load; upstream's inference example loads 'encoder'."""
+
+
+class AudioJEPAConfig(AudioJEPAEncoderConfig):
+    """Audio-JEPA pretraining: context encoder, EMA target encoder, ViT predictor. Defaults are upstream's
+    configs/model/jepa.yaml, configs/masks/random_block.yaml and MAWeightUpdate, except lr, which upstream sets for
+    4 GPUs x batch 64 (ref_lr 1e-3 at batch 256)."""
+
+    backbone_name: AudioJEPAVariant = "audio_jepa_vit_base"
+    predictor_embed_dim: int = 384
+    """VisionTransformerPredictor width (upstream default; its jepa.yaml doesn't override it)."""
+    predictor_depth: int = 6
+    predictor_num_heads: int = 12
+    masks: Literal["random_block", "multiblock"] = "random_block"
+    """random_block: upstream's default (masks/random_block.yaml), a random mask_ratio share of patches is
+    predicted from the rest. multiblock: I-JEPA blocks (masks/multiblock.yaml)."""
+    mask_ratio: tuple[float, float] = (0.4, 0.6)
+    """random_block: share of patches to predict, drawn uniformly per batch."""
+    enc_mask_scale: tuple[float, float] = (0.8, 1.0)
+    """multiblock: context block size, as a share of the patches."""
+    pred_mask_scale: tuple[float, float] = (0.15, 0.2)
+    """multiblock: each target block's size, as a share of the patches."""
+    aspect_ratio: tuple[float, float] = (0.5, 2.0)
+    """multiblock: target block time / freq aspect ratio range."""
+    npred: int = 3
+    """multiblock: target blocks per clip."""
+    loss_type: Literal["norm_mse", "mse", "smooth_l1"] = "norm_mse"
+    norm_pix_loss: Union[bool, Literal["center"]] = True
+    """Layer-normalise (True) or centre ('center') the target tokens before the loss."""
+    ema_initial_tau: float = 0.996
+    ema_final_tau: float = 1.0
+    """Target-encoder EMA rate, cosine-ramped from initial to final over all training steps (MAWeightUpdate 'cos')."""
+    downstream_encoder: Literal["target", "context"] = "target"
+    """Encoder a fine-tune / embedding run loads from this run's checkpoint: the EMA target (I-JEPA's choice) or
+    the gradient-trained context encoder."""
+    audioset_checkpoint: Optional[str] = None
+    """Start from upstream's released AudioSet JEPA.ckpt (ViT-base; encoder, target encoder and predictor are
+    loaded) and continue pretraining. Unset = from scratch."""
+    init_checkpoint: Optional[str] = None
+    """Local fold<n>_best.pt / fold<n>_last.pt of a prior paradigm 'audio_jepa' run to continue from (whole model).
+    Optimiser and schedules start fresh."""
+    epochs: int = 10
+    lr: float = 2.5e-4
+    """Peak lr after warmup (upstream ref_lr 1e-3 at batch 256; 2.5e-4 is that linearly scaled to batch 64)."""
+    start_lr: float = 1e-6
+    final_lr: float = 0.0
+    warmup_steps: int = Field(default=1000, ge=0)
+    """WarmupCosineScheduler: linear start_lr -> lr over warmup_steps optimiser steps, then cosine to final_lr."""
+    weight_decay: float = 1e-6
+    final_weight_decay: float = 1e-6
+    """CosineWDScheduler ref_wd -> final_wd (upstream: both 1e-6); biases and 1-d params get none."""
+    betas: tuple[float, float] = (0.9, 0.95)
+    device: str = Field(default_factory=lambda: "cuda" if torch.cuda.is_available() else "cpu")
+    amp: bool = True
+    """bf16 autocast (upstream trains bf16-mixed)."""
+    max_grad_norm: Optional[float] = None
+    """Global grad-norm clip; upstream doesn't clip."""
+    early_stopping_patience: Optional[int] = Field(default=None, ge=1)
+    log_train_loss_every: int = Field(default=0, ge=0)
+    """When > 0, log mean train loss / lr / EMA tau every this-many optimiser steps (train_loss_step, lr_step,
+    ema_tau_step)."""
+    save_every_epoch: bool = False
+
+
 PerchV2Variant = Literal["perch_v2"]
 
 
@@ -244,6 +342,13 @@ class SSAMBAConfig(SSAMBAEncoderConfig):
     via torch.optim.lr_scheduler.CosineAnnealingLR."""
     lr_scheduler_min_lr: float = 0.0
     """Final lr at the end of cosine annealing; ignored when lr_scheduler is False."""
+    lr_warmup_steps: int = Field(default=0, ge=0)
+    """When > 0, replaces the per-epoch cosine (lr_scheduler is then ignored): lr rises linearly from 0 to config.lr
+    over this many optimizer steps, then cosine-anneals to lr_scheduler_min_lr over the remaining
+    epochs * steps_per_epoch steps, updated every optimizer step. 0 keeps the old behaviour."""
+    log_train_loss_every: int = Field(default=0, ge=0)
+    """When > 0, log the mean train loss of every this-many optimizer steps to MLflow as train_loss_step
+    (step = global optimizer step), so within-epoch loss spikes are visible. 0 disables it."""
     save_every_epoch: bool = False
     """Also keep fold<n>_epoch<NN>.pt (same bundle as fold<n>_last.pt) after every epoch, in the run's
     data/model_trainer/<run_id>/ dir (not logged to MLflow), so intermediate checkpoints can be probed."""
@@ -252,9 +357,11 @@ class SSAMBAConfig(SSAMBAEncoderConfig):
 class ClassifierConfig(StrictBaseModel):
     """Backbone + linear classification head"""
 
-    backbone_name: Union[backbone, SSAMBAVariant, PerchV2Variant] = "resnet18"
+    backbone_name: Union[backbone, SSAMBAVariant, PerchV2Variant, AudioJEPAVariant] = "resnet18"
     ssamba: Optional[SSAMBAClassifierConfig] = None
     """Required when backbone_name is an ssamba_* variant."""
+    audio_jepa: Optional[AudioJEPAClassifierConfig] = None
+    """Required when backbone_name is an audio_jepa_* variant."""
     perch_v2: Optional[PerchV2ClassifierConfig] = None
     """Required when backbone_name is perch_v2."""
     init_checkpoint: Optional[str] = None
@@ -333,7 +440,7 @@ class ModelTrainerConfig(StrictBaseModel):
     run_name: Optional[str] = None
     """MLflow sub-run name. If unset, MLflow auto-generates one."""
     dataloader: DataLoaderConfig = DataLoaderConfig()
-    paradigm: Literal["simclr", "moco", "moco_v3", "ssamba", "classifier"] = "simclr"
+    paradigm: Literal["simclr", "moco", "moco_v3", "ssamba", "audio_jepa", "classifier"] = "simclr"
     """Which Trainer train_model runs."""
     simclr: SimCLRConfig = SimCLRConfig()
     moco: Optional[MoCoConfig] = None
@@ -342,6 +449,8 @@ class ModelTrainerConfig(StrictBaseModel):
     """Required when paradigm == 'moco_v3'."""
     ssamba: Optional[SSAMBAConfig] = None
     """Required when paradigm == 'ssamba'."""
+    audio_jepa: Optional[AudioJEPAConfig] = None
+    """Required when paradigm == 'audio_jepa'."""
     classifier: Optional[ClassifierConfig] = None
     """Required when paradigm == 'classifier'."""
     tune: Optional[RayTuneConfig] = None

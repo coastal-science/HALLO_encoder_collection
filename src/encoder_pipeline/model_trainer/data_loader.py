@@ -68,7 +68,7 @@ def window_targets(
     w0 = (begin + end) / 2 - window_s / 2
     for idx in pd.Series(np.arange(len(labels))).groupby(files).indices.values():
         overlaps = (begin[idx][None, :] < w0[idx][:, None] + window_s) & (end[idx][None, :] > w0[idx][:, None])
-        targets[idx] = np.maximum(targets[idx], overlaps.astype(np.float32) @ np.eye(n_classes, dtype=np.float32)[labels[idx]])
+        targets[idx] = np.maximum(targets[idx], (overlaps.astype(np.float32) @ np.eye(n_classes, dtype=np.float32)[labels[idx]]) > 0)
     if background is not None:
         others = np.delete(targets, background, axis=1).any(axis=1)
         targets[others, background] = 0
