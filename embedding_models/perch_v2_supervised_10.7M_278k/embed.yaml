@@ -1,0 +1,56 @@
+# Perch v2 (EfficientNet-B3) | supervised | 10.7M backbone params | 278k training spectrograms
+# Google's Perch v2 weights fine-tuned supervised on the labelled DORI source split (pretraining comparison arm G,
+# stage 1; MLflow b0cb422a7cca46a0a37d3ac1c389b9ff). 1536-d embeddings. Uses the torch-converted
+# backbone through the spectrogram pipeline (source HALLO_encoder_collection), not perch_hoplite: that would load
+# Google's original weights, not this fine-tune.
+#
+# NOTE: this .pt is NOT a byte copy of the original. G was trained when PerchV2Backbone.forward multiplied its
+# input by input_scale = 0.1 * ln(10) / 20 (dB -> Perch's units); commit 1ff4295 removed that multiply, so the
+# original checkpoint run under current code gets ~87x too-large inputs (embedding cosine ~0.02 to the trained
+# model's). Here the scale is folded into the bias-free stem conv (weight *= input_scale, exact) and the pickled
+# input_scale attribute set to 1.0, so it embeds correctly with the current code (cos 0.99999 vs. the original
+# with the scale applied by hand).
+#
+# The spectrogram MUST be the one this model was trained on, which is Perch v2's own frontend, not 00_base.yaml's.
+# Copied from configs/pretraining_comparison/G_perch_v2_supervised_source/11_*.yaml (see its header for the derivation):
+# 32 kHz, 5 s windows -> 128 HTK mels x 497 frames, amplitude dB vs the window sum, peak-normalised to 0.25 per clip.
+#
+# Frozen-encoder embeddings + linear probe on the DCLDE 2027 test dataset (../test_dataset/). All paths are
+# relative to the repo root, so run from there. To embed your own data, see "Embedding your own data" in ../README.md;
+# keep everything under preprocessor.spectrogram / annotation / audio_file.
+preprocessor:
+  spectrogram:
+    stft:
+      n_fft: 1024
+      hop_length: 320
+      win_length: 640
+      window: hann
+      center: false
+      pad_mode: constant
+    freq_scale: mel
+    mel:
+      n_mels: 128
+      fmin: 60
+      fmax: 16000
+      htk: true
+      norm: null
+      power: 1.0
+    dynamic: db
+    db:
+      ref: 320.0 # sum of the 640-sample periodic Hann window: Perch divides the window by its sum
+      amin: 0.0032 # 1e-5 * 320 = Perch's log floor
+      top_db: null
+  annotation:
+    time_offset: 2.5 # Perch's 5 s window
+    peak_normalize: 0.25 # perch_hoplite normalize_audio: mean removed, peak -> 0.25 per 5 s clip
+  audio_file:
+    resample_sr: 32000
+  dataset:
+    annotations_csv: embedding_models/test_dataset/dclde_2027_test_annotations.csv
+model_trainer:
+  run_name: embed_perch_v2_supervised_10.7M_278k_dclde_test
+  dataloader:
+    splits_path: embedding_models/test_dataset/dclde_2027_test_splits.csv
+    classes: [Background, HW, SRKW, TKW]
+embeddings:
+  checkpoint_path: embedding_models/perch_v2_supervised_10.7M_278k/perch_v2_supervised_10.7M_278k.pt

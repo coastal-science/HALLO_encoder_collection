@@ -1,0 +1,78 @@
+# Shared base for embedding with the trained models in embedding_models/. Always used as --config, with one
+# model's embed.yaml as --override (see README.md):
+#   python -m encoder_pipeline.pipeline --config embedding_models/00_base.yaml \
+#       --override embedding_models/<model>/embed.yaml
+#
+# Every config here is a FROZEN-ENCODER probe: embeddings.checkpoint_path is set, so the pipeline skips
+# model_trainer, embeds every fold with that one checkpoint's backbone, then trains the linear probe on them.
+# There is no classifier section because nothing is trained.
+#
+# The preprocessor section matches configs/pretraining_comparison/00_base.yaml value for value (the spectrogram
+# the EffNet-B1 / SSAMBA-tiny / Audio-JEPA checkpoints were trained on: 24 kHz, 3 s windows -> 256 mels x 563
+# frames), so an existing preprocessed HDF5 for the same annotations csv is reused rather than rebuilt.
+# perch_v2_supervised_10.7M_278k/embed.yaml overrides it with Perch v2's own frontend.
+#
+# IMPORTANT: the embeddings stage takes its spectrogram from this YAML, NOT from the spectrogram_config stored
+# in the checkpoint. If you change the spectrogram or window length, the backbone will see inputs it was not
+# trained on (SSAMBA / Audio-JEPA also assert a fixed 256 x 563 input).
+
+experiment_name: embedding-models
+mlflow_tracking_uri: http://localhost:5000
+data_dir: data # relative: run from the repo root
+preprocessor:
+  run_name: null
+  spectrogram:
+    stft:
+      n_fft: 1024
+      hop_length: 128
+      win_length: 1024
+      window: hann
+      center: true
+    freq_scale: mel
+    mel:
+      n_mels: 256
+      fmin: 200
+      fmax: 12000
+      htk: false
+      norm: slaney
+      power: 2.0
+    dynamic: db
+    db:
+      ref: 1
+  annotation:
+    time_offset: 1.5 # half-width of the 3 s window these models were trained on
+  audio_file:
+    resample_sr: 24000
+  dataset:
+    annotations_csv: null # set per config
+    classes_to_drop:
+    - NRKW
+    - OKW
+    - KW_und
+    - SAR
+    max_workers: -1
+model_trainer:
+  run_name: null # set per config; the MLflow run the embeddings + probe are logged under
+  paradigm: classifier
+  dataloader:
+    splits_path: null # set per config (a pinned splits csv), or null to compute folds here
+    col_to_group_by: LocalPath
+    test_holdout_col: null
+    test_holdout_values: null
+    batch_size: 64
+    shuffle: true
+    n_folds: 5
+    test_size: 0.1
+    split_seed: 10
+    num_workers: 12
+    class_label_map:
+      AB: Background
+      UndBio: Background
+    oversample_background_label: Background
+    oversample: true
+embeddings:
+  source: HALLO_encoder_collection # a model_trainer checkpoint (checkpoint_path, set per config)
+  mlflow_id: null # null = a new run named model_trainer.run_name
+  linear_probe_epochs: 50 # as the pretraining comparison's frozen probes (F arms, perch_v2_probe)
+  linear_probe_lr: 0.0003
+  linear_probe_save: false # true also writes fold<n>_linear_probe.pt next to the predictions

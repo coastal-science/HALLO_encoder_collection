@@ -8,6 +8,8 @@ wandb/
 mlruns/
 mlartifacts/
 *.pt
+# embedding_models' checkpoints are tracked, through Git LFS (see .gitattributes)
+!embedding_models/**/*.pt
 *.ckpt
 *mlflow.db*
 scripts/DCLDE_2027/experimental/*.csv

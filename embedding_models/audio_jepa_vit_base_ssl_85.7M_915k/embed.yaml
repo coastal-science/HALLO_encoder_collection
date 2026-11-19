@@ -1,0 +1,18 @@
+# Audio-JEPA ViT-base | self-supervised | 85.7M backbone params | 915k training spectrograms
+# Self-supervised on J's labelled SSL rows (pretraining comparison arm K; MLflow 580c8a22329142f3b4d19111d69b5290;
+# the backbone is the EMA target encoder). 768-d embeddings (mean patch token). The backbone asserts
+# 256 mel x 563 frame inputs (3 s @ 24 kHz), the preprocessor from ../00_base.yaml; don't change it. ViT-base runs
+# fp32 here, so lower model_trainer.dataloader.batch_size if the GPU runs out of memory.
+#
+# Frozen-encoder embeddings + linear probe on the DCLDE 2027 test dataset (../test_dataset/). All paths are
+# relative to the repo root, so run from there. To embed your own data, see "Embedding your own data" in ../README.md.
+preprocessor:
+  dataset:
+    annotations_csv: embedding_models/test_dataset/dclde_2027_test_annotations.csv
+model_trainer:
+  run_name: embed_audio_jepa_vit_base_ssl_85.7M_915k_dclde_test
+  dataloader:
+    splits_path: embedding_models/test_dataset/dclde_2027_test_splits.csv
+    classes: [Background, HW, SRKW, TKW]
+embeddings:
+  checkpoint_path: embedding_models/audio_jepa_vit_base_ssl_85.7M_915k/audio_jepa_vit_base_ssl_85.7M_915k.pt

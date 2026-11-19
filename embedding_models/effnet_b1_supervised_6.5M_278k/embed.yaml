@@ -1,0 +1,16 @@
+# EfficientNet-B1 | supervised | 6.5M backbone params | 278k training spectrograms
+# Supervised classifier on DORI v2 (exp_2_effnet_b1; MLflow a1e2027254284d009685551bb9c8b5cb).
+# 1280-d embeddings from 256 mel x 563 frame spectrograms (3 s @ 24 kHz), the preprocessor from ../00_base.yaml.
+#
+# Frozen-encoder embeddings + linear probe on the DCLDE 2027 test dataset (../test_dataset/). All paths are
+# relative to the repo root, so run from there. To embed your own data, see "Embedding your own data" in ../README.md.
+preprocessor:
+  dataset:
+    annotations_csv: embedding_models/test_dataset/dclde_2027_test_annotations.csv
+model_trainer:
+  run_name: embed_effnet_b1_supervised_6.5M_278k_dclde_test
+  dataloader:
+    splits_path: embedding_models/test_dataset/dclde_2027_test_splits.csv
+    classes: [Background, HW, SRKW, TKW]
+embeddings:
+  checkpoint_path: embedding_models/effnet_b1_supervised_6.5M_278k/effnet_b1_supervised_6.5M_278k.pt
