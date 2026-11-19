@@ -17,6 +17,55 @@ The `.pt` checkpoints are stored with [Git LFS](https://git-lfs.com) (`.gitattri
 run `git lfs install` once before cloning; otherwise the `.pt` files arrive as small text pointers and the
 configs fail to load them. In a clone made without it, run `git lfs pull`.
 
+## Downstream results
+
+Taken from the result tables (`summary.csv`) of `configs/pretraining_comparison/compare_all_experiments.ipynb`
+(killer whale, DORI) and `configs/adaptation_experiments/compare_adaptation_experiments.ipynb` (blue / fin whale,
+on joy-lab), built from their MLflow runs. Values are mean ± std over 5 folds at the val-tuned threshold
+(the threshold maximising F1 on val). `--` = not run for this model.
+
+**Killer whale (DORI): SRKW vs rest, 100 % of site labels**
+
+| Model | Method | Site | F1 | Precision | Recall | PR-AUC |
+|---|---|---|---|---|---|---|
+| effnet_b1_supervised_6.5M_278k | fine-tune | Strait of Georgia | 0.758 ± 0.027 | 0.817 ± 0.081 | 0.714 ± 0.052 | 0.828 ± 0.020 |
+| | fine-tune | LimeKiln | 0.962 ± 0.011 | 0.966 ± 0.006 | 0.959 ± 0.024 | 0.977 ± 0.009 |
+| | fine-tune | Tekteksen | 0.940 ± 0.008 | 0.945 ± 0.019 | 0.935 ± 0.009 | 0.984 ± 0.003 |
+| | linear probe | Strait of Georgia | 0.502 ± 0.012 | 0.467 ± 0.037 | 0.547 ± 0.033 | 0.526 ± 0.004 |
+| | linear probe | LimeKiln | 0.926 ± 0.021 | 0.943 ± 0.012 | 0.912 ± 0.049 | 0.955 ± 0.001 |
+| | linear probe | Tekteksen | 0.760 ± 0.010 | 0.730 ± 0.085 | 0.808 ± 0.077 | 0.868 ± 0.026 |
+| perch_v2_supervised_10.7M_278k | fine-tune | Strait of Georgia | 0.882 ± 0.015 | 0.908 ± 0.058 | 0.859 ± 0.025 | 0.931 ± 0.004 |
+| | fine-tune | LimeKiln | 0.919 ± 0.005 | 0.919 ± 0.011 | 0.919 ± 0.017 | 0.906 ± 0.018 |
+| | fine-tune | Tekteksen | 0.948 ± 0.001 | 0.957 ± 0.020 | 0.940 ± 0.018 | 0.986 ± 0.001 |
+| | linear probe | all sites | -- | -- | -- | -- |
+| ssamba_tiny_ssl_6.9M_915k | fine-tune | Strait of Georgia | 0.608 ± 0.065 | 0.514 ± 0.106 | 0.765 ± 0.028 | 0.736 ± 0.071 |
+| | fine-tune | LimeKiln | 0.911 ± 0.089 | 0.926 ± 0.010 | 0.906 ± 0.150 | 0.946 ± 0.023 |
+| | fine-tune | Tekteksen | 0.965 ± 0.004 | 0.978 ± 0.005 | 0.953 ± 0.005 | 0.991 ± 0.003 |
+| | linear probe | all sites | -- | -- | -- | -- |
+| audio_jepa_vit_base_ssl_85.7M_915k | fine-tune | Strait of Georgia | 0.538 ± 0.150 | 0.587 ± 0.251 | 0.585 ± 0.095 | 0.577 ± 0.211 |
+| | fine-tune | LimeKiln | 0.784 ± 0.095 | 0.818 ± 0.110 | 0.769 ± 0.137 | 0.858 ± 0.084 |
+| | fine-tune | Tekteksen | 0.811 ± 0.030 | 0.890 ± 0.014 | 0.747 ± 0.052 | 0.915 ± 0.020 |
+| | linear probe | all sites | -- | -- | -- | -- |
+
+**Blue / fin whale (Antarctic): each species vs rest, pooled over all 11 deployments**
+
+| Model | Method | Experiment | Species | F1 | Precision | Recall | PR-AUC |
+|---|---|---|---|---|---|---|---|
+| effnet_b1_supervised_6.5M_278k | fine-tune | exp6 single-label | Blue | 0.794 ± 0.004 | 0.773 ± 0.007 | 0.816 ± 0.009 | 0.866 ± 0.009 |
+| | fine-tune | exp6 single-label | Fin | 0.792 ± 0.015 | 0.801 ± 0.018 | 0.782 ± 0.015 | 0.850 ± 0.012 |
+| | fine-tune | exp7 multi-label | Blue | 0.808 ± 0.008 | 0.815 ± 0.021 | 0.802 ± 0.014 | 0.894 ± 0.005 |
+| | fine-tune | exp7 multi-label | Fin | 0.829 ± 0.008 | 0.866 ± 0.016 | 0.796 ± 0.018 | 0.909 ± 0.008 |
+| | linear probe* | exp6 single-label | Blue | 0.786 ± 0.005 | 0.765 ± 0.012 | 0.809 ± 0.011 | 0.860 ± 0.010 |
+| | linear probe* | exp6 single-label | Fin | 0.795 ± 0.013 | 0.795 ± 0.011 | 0.795 ± 0.014 | 0.850 ± 0.013 |
+| | linear probe* | exp7 multi-label | Blue | 0.806 ± 0.007 | 0.807 ± 0.022 | 0.806 ± 0.017 | 0.891 ± 0.005 |
+| | linear probe* | exp7 multi-label | Fin | 0.827 ± 0.011 | 0.860 ± 0.011 | 0.797 ± 0.020 | 0.904 ± 0.011 |
+| perch_v2_supervised_10.7M_278k | both | all | -- | -- | -- | -- | -- |
+| ssamba_tiny_ssl_6.9M_915k | both | all | -- | -- | -- | -- | -- |
+| audio_jepa_vit_base_ssl_85.7M_915k | both | all | -- | -- | -- | -- | -- |
+
+\* In the blue / fin experiments, the linear probe is a head trained on the **fine-tuned** model's embeddings; the
+killer whale probes are trained on the frozen pretrained encoder.
+
 ## Running
 
 All config paths are relative to the repo root, so run from there. Use a venv that has `timm`
